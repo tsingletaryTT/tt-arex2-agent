@@ -1,0 +1,6 @@
+tt-arex2-agent
+Copyright 2026 Tenstorrent AI ULC
+
+Licensed under the Apache License, Version 2.0. This license covers the code in this repository only.
+The AREX-2 weights (BAAI/AREX-2) are Apache-2.0; follow the terms and notices for the Qwen base model and any data or tools.
+arex2_agent/code_sandbox.py is copied from tt-orchard (orchard/lm_eval_tasks/code_sandbox.py, Apache-2.0).
