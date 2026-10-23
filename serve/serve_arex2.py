@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -33,6 +34,27 @@ BOOT_DEADLINE_S = 45 * 60          # a cold first boot took about 26 minutes on 
 STOP_GRACE_S = 30
 PACKAGE = "episod/arex-2-p300"
 LOG_TAIL_CHARS = 1500
+FIRST_ERROR_CLIP = 300             # the first error is quoted up to this many characters
+FIRST_ERROR_MAX_BYTES = 8 * 1024 * 1024    # a log is read up to here: the first error is near the start
+
+# A process tag "(EngineCore pid=7) " and a log prefix "ERROR 10-23 12:16:06 [core.py:1330] ", each followed by one space.
+_LOG_PREFIX = re.compile(r"^(?:\(\w+ pid=\d+\) )?(?:(?:ERROR|CRITICAL|WARNING) \d\d-\d\d \d\d:\d\d:\d\d \[[^\]]*\] )?")
+_EXCEPTION_LINE = re.compile(r"^(?:\w+\.)*(?:[A-Za-z_]\w*)?(?:Error|Exception|Exit|Interrupt)\b(?::\s.*)?$")
+_CAUSE_WORDS = re.compile(r"\b(?:build failed|compile failure|No space left on device|TT_THROW)\b")
+_WRAPPERS = ("See root cause above",)      # vLLM's last line when its engine died: the cause is earlier
+
+
+def first_error(text: str) -> Optional[tuple[int, str]]:
+    """(line number, text) of the first line of a server log that states an error: an exception line ("RuntimeError: ..."),
+    a kernel build or compile failure, a TT_THROW, or a full disk. A wrapper that only points back at the cause does not count,
+    and neither does an indented line (a traceback frame or the source it shows). None when no line qualifies."""
+    for n, raw in enumerate(text.split("\n"), 1):
+        body = _LOG_PREFIX.sub("", raw, count=1)
+        if body[:1].isspace() or any(w in body for w in _WRAPPERS):
+            continue
+        if _EXCEPTION_LINE.match(body) or _CAUSE_WORDS.search(body):
+            return n, (body if len(body) <= FIRST_ERROR_CLIP else body[:FIRST_ERROR_CLIP - 1] + "…")
+    return None
 
 
 class LauncherError(Exception):
@@ -108,14 +130,25 @@ class Launcher:
             code = self.proc.poll()
             if code is not None:
                 log.flush()
-                raise LauncherError(f"the server script exited with status {code} before the server answered. End of its log ({self.log_path}):\n{self._tail()}")
+                raise LauncherError(f"the server script exited with status {code} before the server answered.{self._first_error_text()}\n"
+                                    f"End of its log ({self.log_path}):\n{self._tail()}")
             model = self.probe(self.url)
             if model:
                 return model
             if self._clock() - start > self.boot_deadline_s:
                 self.stop()
-                raise LauncherError(f"the server did not answer within {self.boot_deadline_s:g} s and was stopped. Its log is {self.log_path}:\n{self._tail()}")
+                raise LauncherError(f"the server did not answer within {self.boot_deadline_s:g} s and was stopped.{self._first_error_text()}\n"
+                                    f"Its log is {self.log_path}:\n{self._tail()}")
             self._sleep(5)
+
+    def _first_error_text(self) -> str:
+        """"\nFirst error (line N): ..." for the server log, or "" when the log has no such line or cannot be read."""
+        try:
+            with open(self.log_path, "rb") as f:
+                found = first_error(f.read(FIRST_ERROR_MAX_BYTES).decode("utf-8", "replace"))
+        except (OSError, TypeError):
+            return ""
+        return f"\nFirst error (line {found[0]}): {found[1]}" if found else ""
 
     def _tail(self) -> str:
         try:
