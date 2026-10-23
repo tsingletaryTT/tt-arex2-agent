@@ -5,7 +5,7 @@
 
     python tools/demo_stack.py [--ui-port 7899] [--model-port 18099]
 
-The model is a script, not AREX-2 (the page's badge says so). Choose "Offline corpus" in the page to keep the tools off the network.
+The model is a script and is not AREX-2 (the page's badge says so). Choose "Offline corpus" in the page to keep the tools off the network.
 """
 from __future__ import annotations
 

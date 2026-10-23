@@ -16,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class FakeOpenAI:
-    def __init__(self, turns=(), model="arex-2-test", piece=7, plain_turns=None, chunk_delay_s=0.0, script_fn=None):
+    def __init__(self, turns=(), model="arex-2-test", piece=7, plain_turns=None, chunk_delay_s=0.0, script_fn=None, raw_unicode=False):
+        self.raw_unicode = raw_unicode                # send JSON with characters such as U+2028 unescaped, as some servers do
         self.script_fn = script_fn                    # when set: turn = script_fn(request_body), so a script can be stateless
         self.chunk_delay_s = chunk_delay_s
         self.turns = list(turns)
@@ -92,7 +93,7 @@ class FakeOpenAI:
                  "choices": [{"index": 0, "delta": delta, "finish_reason": finish}] if delta is not None or finish else []}
         if usage:
             chunk["usage"] = usage
-        wfile.write(b"data: " + json.dumps(chunk).encode() + b"\n\n")
+        wfile.write(b"data: " + json.dumps(chunk, ensure_ascii=not self.raw_unicode).encode("utf-8") + b"\n\n")
         wfile.flush()
         if self.chunk_delay_s:
             time.sleep(self.chunk_delay_s)

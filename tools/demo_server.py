@@ -6,7 +6,7 @@
     python tools/demo_server.py --port 8000          # then: python demo/app.py   (choose "Offline corpus" in the page)
 
 THIS IS NOT AREX-2. It replays a fixed script for the preset missions: the same tool calls, the same text, every time. Its model name is
-"SCRIPTED-FAKE-MODEL (not AREX-2)" and the page shows that name in its badge. Anything made with it (the README screenshots) shows the page, not the model.
+"SCRIPTED-FAKE-MODEL (not AREX-2)" and the page shows that name in its badge. Anything made with it (the README screenshots) shows the page. It does not show the model.
 The improvement-lab scores are real: the submitted code is run by the lab in its sandbox.
 """
 from __future__ import annotations

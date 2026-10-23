@@ -470,3 +470,30 @@ def test_the_lab_scorecard_leaves_out_the_source_and_claim_rows_and_says_how_man
 
 def test_one_submission_is_not_pluralised():
     assert "submitted 1 solution" in views.scorecard_html(dict(AGENT, lab_score=0.5, rounds=1), None, None) and "1 solutions" not in views.scorecard_html(dict(AGENT, lab_score=0.5, rounds=1), None, None)
+
+
+def test_a_round_that_timed_out_says_so_in_the_large_input_column():
+    r = make_round(1, 0.6)
+    r.report.timed_out = True
+    r.report.large_seconds = None
+    assert "timed out" in views.rounds_html([r])
+
+
+def _vars(block: str) -> set:
+    return set(re.findall(r"(--[a-z-]+)\s*:", block))
+
+
+def test_the_dark_palette_follows_gradios_dark_class_and_defines_every_variable_the_light_one_does():
+    css = views.CSS
+    light = re.search(r":root\{(.*?)\}", css, re.S).group(1)
+    dark = re.search(r"\.dark\{(.*?)\}", css, re.S)
+    assert dark is not None, "the dark palette must be under .dark, the class Gradio puts on the body"
+    assert _vars(light) - {"--mono"} <= _vars(dark.group(1))
+    assert "#092221" in dark.group(1).upper() or "#092221" in dark.group(1)
+
+
+def test_every_colour_the_fragments_use_comes_from_a_variable_so_dark_mode_reaches_it():
+    body = views.CSS.split("}", 2)[-1]
+    hard = re.findall(r"(?:background|color|border-left)\s*:\s*(#[0-9A-Fa-f]{3,8})", body)
+    allowed = {"#F6BC42", "#FA512E"}          # the brand warning colours work on both palettes
+    assert [h for h in hard if h.upper() not in allowed] == []

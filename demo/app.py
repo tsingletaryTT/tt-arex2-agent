@@ -62,7 +62,7 @@ preset missions. It is not a search engine.
 
 ### Limits
 
-Tool results are untrusted text and are shown as plain text. The claim check is string matching. The lab is a demo of a loop, not an adversarial benchmark. The
+Tool results are untrusted text and are shown as plain text. The claim check is string matching. The lab demonstrates a loop. It is not an adversarial benchmark. The
 page has no login.
 """
 
@@ -209,7 +209,7 @@ def build_app(default_url: Optional[str] = None) -> gr.Blocks:
                 try:
                     for snap in snaps:
                         yield emit(sess, snap)
-                except Exception as e:                                          # the page must show a plain message, not a traceback
+                except Exception as e:                                          # the page shows a plain message and not a traceback
                     print(f"page error: {type(e).__name__}: {e}", file=sys.stderr)
                     yield (sess, views.notice_html("error", f"Something went wrong in the page: {type(e).__name__}: {e}"), gr.skip(), gr.skip(), gr.skip(), gr.skip(),
                            gr.skip(), gr.skip(), gr.update(visible=False))

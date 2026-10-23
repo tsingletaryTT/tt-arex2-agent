@@ -140,3 +140,11 @@ def test_a_models_request_that_fails_says_so_with_the_status():
         with pytest.raises(chat.ServerError) as e:
             chat.ChatClient(f.url).models()
     assert e.value.status == 502
+
+
+@pytest.mark.parametrize("sep", ["\u2028", "\u2029", "\x85", "\x0b", "\x0c", "\x1c"])
+def test_a_line_separator_character_inside_a_streamed_chunk_does_not_split_the_event(sep):
+    text = f"before{sep}after"
+    with FakeOpenAI([{"reasoning": text, "content": text}], piece=50, raw_unicode=True) as f:
+        r = chat.ChatClient(f.url, model="m").complete(MSGS)
+    assert r.content == text and r.reasoning == text and r.finish_reason == "stop"

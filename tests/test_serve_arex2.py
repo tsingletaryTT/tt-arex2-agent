@@ -222,3 +222,17 @@ def test_a_server_that_ends_within_the_grace_period_is_not_killed():
     proc.exit_after, proc.polls = proc.polls + 3, proc.polls          # it takes a few checks to end after the request
     l.stop()
     assert [s for _, s in l.calls["killpg"]] == [signal.SIGTERM]
+
+
+def test_the_manifest_parses_with_tt_discolikes_own_parser_when_it_is_installed():
+    import importlib.util
+    root = Path.home() / "code" / "tt-discolike"
+    if not (root / "discolike" / "manifest.py").exists():
+        pytest.skip("tt-discolike is not checked out here")
+    sys.path.insert(0, str(root))
+    try:
+        from discolike import manifest
+    except ImportError as e:                       # its own dependencies (PyYAML) may be missing in this venv
+        pytest.skip(f"tt-discolike cannot be imported here: {e}")
+    m = manifest.parse_manifest(Path(__file__).resolve().parent.parent / ".disco" / "app.yaml")
+    assert m.name == "arex2-research-lab" and m.port == 7872 and m.chips == 2 and "serve_arex2.py" in m.launch

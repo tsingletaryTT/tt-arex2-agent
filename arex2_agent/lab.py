@@ -11,7 +11,7 @@ test passes: full credit at or under `fast_s` seconds on the large input, none a
 
 The program runs in the Landlock/seccomp sandbox (no network, no files outside a scratch directory) with a time limit. The harness prints its results
 as JSON lines that start with a random token made for each run; lines without the token are ignored. This stops a solution from printing its own score
-by accident. It does not stop a solution that deliberately reads the token from the process: the lab is a demo of a loop, not an adversarial benchmark.
+by accident. It does not stop a solution that deliberately reads the token from the process: the lab demonstrates a loop and is not an adversarial benchmark.
 """
 from __future__ import annotations
 

@@ -16,10 +16,7 @@ from typing import Iterable, Optional
 CSS = """
 :root{--bg:#F1F8F8;--panel:#FFFFFF;--alt:#DCF0EE;--line:#C7D9D8;--ink:#092221;--soft:#3A5452;--accent:#1B8EB1;--teal:#74C5DF;--green:#2F7F6F;--green-bg:#E3F1EE;
 --amber:#8A5A00;--amber-bg:#FDF1D6;--red:#B3361C;--red-bg:#FFE6E0;--blue-bg:#E1F1F7;--mono:ui-monospace,'Berkeley Mono',SFMono-Regular,Menlo,monospace}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#092221;--panel:#0F2F2E;--alt:#143B3A;--line:#24504F;--ink:#F1F8F8;--soft:#A9C4C2;--accent:#74C5DF;
---teal:#74C5DF;--green:#6FABA0;--green-bg:#123B36;--amber:#F6BC42;--amber-bg:#3B3010;--red:#FF9E8A;--red-bg:#40201A;--blue-bg:#10343F}}
-:root[data-theme="dark"]{--bg:#092221;--panel:#0F2F2E;--alt:#143B3A;--line:#24504F;--ink:#F1F8F8;--soft:#A9C4C2;--accent:#74C5DF;--teal:#74C5DF;--green:#6FABA0;--green-bg:#123B36;
---amber:#F6BC42;--amber-bg:#3B3010;--red:#FF9E8A;--red-bg:#40201A;--blue-bg:#10343F}
+.dark{--bg:#092221;--panel:#0F2F2E;--alt:#143B3A;--line:#24504F;--ink:#F1F8F8;--soft:#A9C4C2;--accent:#74C5DF;--teal:#74C5DF;--green:#6FABA0;--green-bg:#123B36;--amber:#F6BC42;--amber-bg:#3B3010;--red:#FF9E8A;--red-bg:#40201A;--blue-bg:#10343F}
 .gradio-container,body{background:var(--bg)!important;color:var(--ink)}
 .arex{font-family:'Neue Haas Unica Pro',system-ui,-apple-system,'Segoe UI',sans-serif;color:var(--ink);line-height:1.45}
 .arex *{box-sizing:border-box}
@@ -272,7 +269,7 @@ def rounds_html(rounds: Iterable) -> str:
                    f"<td>{_large(r.report)}</td></tr>" for r in rounds)
     return (f'<div class="arex">{svg}<table><tr><th>Round</th><th>Score</th><th>Tests passed</th><th>Large input</th></tr>{rows}</table>'
             f'<details><summary>Code of the best round (round {best.number}, score {best.report.score:.2f})</summary><pre>{esc(best.code)}</pre></details>'
-            '<div class="note">Score = 0.7 x correctness + 0.3 x speed on a large input. The lab defines this score. It measures this task, not the model in general.</div></div>')
+            '<div class="note">Score = 0.7 x correctness + 0.3 x speed on a large input. The lab defines this score. It measures this task only.</div></div>')
 
 
 # ---- notices and badges -----------------------------------------------------------------------------------------------------------

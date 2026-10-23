@@ -1,0 +1,43 @@
+# tt-arex2-agent project log
+
+## Original prompt (2026-10-22, from the tt-orchard session)
+"build a gradio app for the model (compat with tt-discolike) that really shows off what it's capable of and disambiguates it from simple chat."
+The model is BAAI/AREX-2, brought up and packaged by tt-orchard (`arex-2-p300`, 2 chips). Local repo only: nothing was pushed, uploaded or published.
+
+## Key decisions
+- AREX-2's card says it is trained to improve a solution over rounds (propose, measure, reflect, revise) on checkable tasks, plus deep research. So the page has two mission kinds:
+  research missions (tools, sources, a claim check) and an improvement lab (code, a sandbox, a measured score per round). A chat box shows neither.
+- Disambiguation from chat: every run can start a plain-chat run of the same question (same model, no tools, one shot, same settings) in parallel. The scorecard counts sources,
+  claims backed, steps, tokens and time. For presets it also counts expected facts found in each answer, labelled as a string match and not a grade. No text says one answer is better.
+- The evidence check matches words and numbers against retrieved text (a stretch of up to 3 sentences, 60% of content words, every number, a claim can use two sources, a sentence that
+  states a calculation's result counts as computed). It says so on the page. It does not judge truth.
+- Tool results are untrusted. `netguard` resolves names itself, refuses non-public addresses at every redirect, pins the connection to the checked address, limits ports, size and time.
+  `run_python` and the lab use tt-orchard's Landlock and seccomp sandbox (copied, with stdout capture added). Everything shown on the page is escaped; only http and https become links.
+- The launcher refuses to boot without a lease (`TT_VISIBLE_DEVICES`), reuses a server that already answers, and always stops what it started. tt-discolike's own parser reads `.disco/app.yaml`.
+- Presets are built by `tools/build_missions.py` from live Wikipedia and arXiv reads with the quotes and the date kept; expected answers are computed from what was read.
+- Screenshots use a scripted stand-in model whose name says `SCRIPTED-FAKE-MODEL (not AREX-2)`; the README says so.
+
+## Log
+- 2026-10-22: built test first, a mutation table per module, in this order: streaming chat client, network guard, sandbox copy, tools, agent loop, evidence check, lab, views, missions,
+  session, launcher, page. About 550 mutations; each survivor was either given a test or judged equivalent (listed below). The suite has no test that needs a chip or the network.
+- Found while testing, each fixed test first:
+  - `resp.read(n)` blocks until n bytes arrive, so a body that trickles in never reached the fetch deadline; the guard now uses `read1`.
+  - Gradio 6 takes `css` in `launch()`, not in `Blocks()`. Its dark mode is a `dark` class on the body; my media-query variables never applied, so dark mode showed light cards on a dark page. The palette is now under `.dark`.
+  - A claim whose words are split over two sources never reached the coverage bar, and "The difference between 1973 and 1918 is 55 years" has no words a source holds. The first is now two-source coverage, the second a narrow rule: at least two numbers, all in one calculator or Python result.
+  - Snapshots copied each step shallowly, so an old snapshot's tool list changed as the run went on. The session copies the lists.
+  - Wikipedia answers 429 to quick bursts. `default_http` retries 429 and 503, honouring Retry-After up to 8 s; the preset builder caches pages on disk.
+  - The chat client splits the event stream on newline bytes only, and a test sends U+2028, U+2029 and the other separators raw inside a chunk (tt-orchard's benchmark tooling broke on U+2028 in `str.splitlines()`).
+- Mistakes of mine: a `ps | grep | xargs kill` line matched its own shell and ended it (use the port's pid); several tests asserted something the code could not fail (an `or` tail, a label that matched itself);
+  my first screenshot wait matched the plain-chat panel's "Finished" text and photographed a run in progress.
+- Equivalent mutants kept as they are: in `netguard._public` the explicit NAT64, 6to4, Teredo and IPv4-mapped branches (Python 3.12's `is_global` already refuses them; they guard other versions);
+  `views` label wording changes; `evidence` second-source union check (rechecked one line later); `lab` slow edge (`>=` against `>` gives the same speed); `code_sandbox` read size (the file-size limit bounds it);
+  the session's `running` flag in the final event (set again at the end of the pump) and `can_resume` without `final` (the loop clears it).
+
+## Not done
+- No run against the real model. First real run, on a free board (2 chips, one lease):
+  `gozer run --chips 2 --who "you:arex2" --reason "AREX-2 research lab, first real run" -- env AREX2_RUN_SH=<installed arex-2-p300 run.sh> .venv/bin/python serve/serve_arex2.py --ui`
+  A cold first boot took about 26 minutes in tt-orchard's stage 7 check; a warm one 100 to 240 s. Then check, in this order: (1) one research mission (watch that tool calls parse and `reasoning_content` streams);
+  (2) how often a reply is cut off at 4,096 tokens or stops inside its reasoning; (3) steps and minutes per preset; (4) the lab tasks (rounds and scores); (5) the plain-chat comparison; (6) the claim check on real answers.
+- The claim check thresholds (60%, 25%, window of 3) and the lab's speed limits are chosen values and need a look at real output.
+- No `package/` notes and no tt-model package. No GitHub repo, no Hugging Face upload.
+- The page's own JavaScript is Gradio's; screenshots were taken with headless Chrome through playwright in a scratch venv (not a dependency of the repo).

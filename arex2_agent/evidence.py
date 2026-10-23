@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Iterable
 from urllib.parse import unquote, urlsplit
 
-COVERAGE = 0.6            # the share of a claim's content words a stretch must contain (a choice, not a measured value)
+COVERAGE = 0.6            # the share of a claim's content words a stretch must contain (a chosen value; nothing measured it)
 OTHER_STRETCH = 0.25      # the share of words another stretch needs before its numbers count for the claim
 MIN_WORDS = 5
 WINDOW = 3

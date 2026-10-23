@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Tenstorrent AI ULC
-"""Take the README screenshots of the page, running against tools/demo_stack.py. They show the page with a SCRIPTED stand-in model, not AREX-2.
+"""Take the README screenshots of the page, running against tools/demo_stack.py. They show the page with a SCRIPTED stand-in model. It is not AREX-2.
 
     python tools/demo_stack.py &                       # in the project's venv
     python tools/screenshots.py http://127.0.0.1:7899/  # in any Python that has the `playwright` package; uses /usr/bin/google-chrome
@@ -22,9 +22,9 @@ def pick_offline(page):
     page.get_by_label("Offline corpus (no network)").check()
 
 
-def finish(page, timeout_ms=180000):
+def finish(page, timeout_ms=180000, marker="Sources read"):
     """The scorecard appears only when the agent has finished (the plain chat panel finishes earlier and shares the 'Finished' wording)."""
-    page.wait_for_function("() => document.body.innerText.includes('Sources read')", timeout=timeout_ms)
+    page.wait_for_function("(m) => document.body.innerText.includes(m)", arg=marker, timeout=timeout_ms)
 
 
 def main(url: str) -> int:
@@ -49,7 +49,7 @@ def main(url: str) -> int:
                 page.get_by_role("option", name="Improvement lab: Fewest coins for an amount").click()
                 page.get_by_role("button", name="Run").last.click()
                 page.wait_for_function("() => (document.body.innerText.match(/Round \\d/g) || []).length >= 3", timeout=240000)
-                finish(page, 240000)
+                finish(page, 240000, marker="Lab score")
                 page.screenshot(path=str(OUT / "lab-done-light.png"), full_page=True)
             ctx.close()
         browser.close()
