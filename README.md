@@ -5,7 +5,7 @@ work in loops: propose, measure, reflect, revise, with tools. A chat box shows o
 
 Model: [`episod/arex-2-p300`](https://huggingface.co/episod/arex-2-p300) on 2 Blackhole chips. Repository: https://github.com/tsingletaryTT/tt-arex2-agent
 
-![A research mission with live tools: arxiv_search, fetch_url, the answer, the evidence board and the scorecard](docs/research-live-light.png)
+![The improvement lab: the model tests its own code, submits it to a sandbox that scores it, and the page shows every step](docs/lab-edit-distance-light.png)
 
 ## What it shows
 
@@ -36,9 +36,9 @@ The header badge in these two shows the offline corpus, as selected.
 
 **Research mission with live tools: the Transformer paper.** The agent called `arxiv_search`, then `fetch_url` on the arXiv abstract page, in 3 steps and 15 seconds. It answered that the paper lists 8 authors, that the last author is Illia Polosukhin, and that version 1 was posted on 12 June 2017. The page's claim check marked that answer "not backed". It matches words and numbers literally and listed 1, 12, 2017 and 8 as not found in the retrieved text. Counting names is outside what it does, and the authors and the submission date are in the text the agent retrieved. This is a limit of the check.
 
-**Improvement lab: edit distance.** The model ran its own tests four times with `run_python`, then submitted once. The lab scored the submission 1.00 (10 of 10 tests, 0.10 seconds on the large input) after 7 steps and 122 seconds. It refused a second, identical submission as a repeated call, and the page shows that step in yellow. The model's final text says its first draft had the delete and substitute transitions swapped and that a brute-force cross-check on small random strings caught it before it submitted. The lab recorded a single submitted round, so the score chart has one point. Plain chat on the same task ran out of the page's 4,096-token reply limit while thinking and produced no code. That limit is a page setting and says nothing about the model.
+![A research mission with live tools: arxiv_search, fetch_url, the answer, the evidence board and the scorecard](docs/research-live-light.png)
 
-![The improvement lab: edit distance](docs/lab-edit-distance-light.png)
+**Improvement lab: edit distance.** The model ran its own tests four times with `run_python`, then submitted once. The lab scored the submission 1.00 (10 of 10 tests, 0.10 seconds on the large input) after 7 steps and 122 seconds. It refused a second, identical submission as a repeated call, and the page shows that step in yellow. The model's final text says its first draft had the delete and substitute transitions swapped and that a brute-force cross-check on small random strings caught it before it submitted. The lab recorded a single submitted round, so the score chart has one point. Plain chat on the same task ran out of the page's 4,096-token reply limit while thinking and produced no code. That limit is a page setting and says nothing about the model.
 
 Two problems found on that first run are fixed in this repository: the header badge did not follow the tools setting, and a failed server start showed only the end of the server log. The launcher now quotes the first real error with its line number.
 
