@@ -232,9 +232,9 @@ def build_app(default_url: Optional[str] = None) -> gr.Blocks:
                 cont_btn = gr.Button("Continue", visible=False)
                 tools_note = gr.Markdown(tools_label("Live web tools"), elem_classes="tools-note")      # what Run will use: the radio in the settings, said where the run starts
             with gr.Row(equal_height=True):
-                notice = gr.HTML(scale=6)
-                download = gr.DownloadButton("Download this run", interactive=False, size="sm", scale=1, min_width=170)
-                copy_btn = gr.Button("Copy answer", interactive=False, size="sm", scale=1, min_width=130)
+                notice = gr.HTML(scale=1)
+                download = gr.DownloadButton("Download this run", interactive=False, size="sm", scale=0, min_width=160)
+                copy_btn = gr.Button("Copy answer", interactive=False, size="sm", scale=0, min_width=130)
             meters = gr.HTML()
             answer_text = gr.Textbox(visible=False)                                      # the plain text of the answer, for Copy
             with gr.Row():

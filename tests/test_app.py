@@ -438,3 +438,25 @@ def test_copy_answer_works_on_a_page_served_over_plain_http_too_and_says_it_copi
     assert "return [text]" in app.COPY_JS
     import inspect
     assert "gr.Info" in inspect.getsource(app.copied)
+
+
+def test_every_class_the_layout_names_has_a_rule_so_the_check_button_lines_up_with_its_input():
+    _, cfg = _cfg()
+    used = set()
+    for c in cfg["components"]:
+        for cls in str(c["props"].get("elem_classes") or "").replace("[", " ").replace("]", " ").replace("'", " ").replace(",", " ").split():
+            used.add(cls)
+    assert {"inline-action", "tools-note", "settings-group"} <= used
+    for cls in ("inline-action", "tools-note", "settings-group"):
+        assert f".{cls}" in app.views.CSS, cls
+    assert "align-self:flex-end" in app.views.CSS.split(".inline-action", 1)[1].split("}", 1)[0]
+
+
+def test_download_and_copy_are_compact_buttons_and_the_status_banner_takes_the_rest_of_the_row():
+    _, cfg = _cfg()
+    comps = _components(cfg)
+    for label in ("Download this run", "Copy answer"):
+        btn = [c for c in cfg["components"] if c["type"] in ("button", "downloadbutton") and (c["props"].get("value") == label or c["props"].get("label") == label)]
+        assert len(btn) == 2 and all(b["props"].get("scale") == 0 for b in btn), label
+    notices = [c for c in cfg["components"] if c["type"] == "html" and c["props"].get("scale") == 1]
+    assert len(notices) == 2

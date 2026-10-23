@@ -55,6 +55,9 @@ CSS = """
 .arex svg text{fill:var(--soft);font-size:11px}.arex svg .line{stroke:var(--accent);fill:none;stroke-width:2}.arex svg .grid{stroke:var(--line)}
 .arex svg circle{fill:var(--accent)}.arex svg circle.best{fill:#FA512E}
 @media (max-width:700px){.arex .head h1{font-size:1.25rem}.arex table{font-size:.82rem}}
+.inline-action{align-self:flex-end;margin-bottom:4px}
+.tools-note{align-self:center}.tools-note p{margin:0;color:var(--soft)}
+.settings-group{gap:4px}.settings-group p{margin:2px 0}
 """
 
 STOP_TEXT = {
