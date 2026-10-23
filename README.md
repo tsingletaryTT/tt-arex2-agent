@@ -3,10 +3,9 @@
 A Gradio page for [BAAI/AREX-2](https://huggingface.co/BAAI/AREX-2), a 27B agent model served on Tenstorrent Blackhole. The model is trained to
 work in loops: propose, measure, reflect, revise, with tools. A chat box shows one reply. This page runs the loop and shows every step of it.
 
-> The screenshots below were made with a **scripted stand-in model** (the page's badge says `SCRIPTED-FAKE-MODEL (not AREX-2)`). They show
-> the page. They are not output of the real model. The improvement-lab scores in them are real: the lab ran the submitted code in its sandbox.
+Model: [`episod/arex-2-p300`](https://huggingface.co/episod/arex-2-p300) on 2 Blackhole chips. Repository: https://github.com/tsingletaryTT/tt-arex2-agent
 
-![A research mission: the loop, the answer, the evidence board and the scorecard](docs/research-done-light.png)
+![A research mission with live tools: arxiv_search, fetch_url, the answer, the evidence board and the scorecard](docs/research-live-light.png)
 
 ## What it shows
 
@@ -17,11 +16,29 @@ work in loops: propose, measure, reflect, revise, with tools. A chat box shows o
 
 **Improvement lab.** The part a chat box cannot show. The agent gets a coding task with hidden tests and a large input. It submits code with `submit_solution`. The lab runs it in a sandbox and returns a measured report: failed tests with their inputs, the runtime on the large input, any error. The agent revises. The chart shows the score per round, and plain chat's one-shot code is scored by the same harness. Score = 0.7 x correctness + 0.3 x speed (speed counts only when every test passes). The lab defines this score. It measures that task only.
 
-![The improvement lab: three rounds scored by the sandbox](docs/lab-done-light.png)
+![The improvement lab: the model tests, fixes and submits an edit-distance solution](docs/lab-edit-distance-light.png)
 
 **Offline corpus.** A switch serves the tools from a small bundled set of Wikipedia and arXiv pages, with no network. The page badges it. It answers the preset missions and nothing else.
 
-**What it costs.** On the box this was written on, AREX-2 decodes at roughly 14 tokens a second per request with four requests running (drafter off, sampling on the host). A thinking step can take minutes. A reply can be cut off at the per-step limit, and the model sometimes stops inside its reasoning. The page says "the thinking budget ran out" and offers to continue with a larger limit, and it says when the model gave neither an answer nor a tool call.
+**What it costs.** A thinking step can take minutes on a hard task, and a reply can be cut off at the per-step limit (the page default is 4,096 tokens, thinking included). The page says "the thinking budget ran out" and offers to continue with a larger limit. It also says when the model gave neither an answer nor a tool call. Speed depends on the package configuration: the [model card](https://huggingface.co/episod/arex-2-p300) lists the measured single-request decode speed with the drafter on and with it off. Several requests at once were not measured on the current package.
+
+## What ran on the real model
+
+On 2026-10-23 the page ran against the published package `episod/arex-2-p300` (2 chips, speculative drafter on, sampling on the device). The model's tool calls parsed correctly through vLLM's `qwen3_coder` parser, and its reasoning came back in `reasoning_content`. These are one run of each kind. They show what the page does with the real model and are not a benchmark.
+
+**Research mission with the offline corpus: the Sydney Opera House architect.** The agent ran 4 steps (`wikipedia_search`, two `wikipedia_page` reads, `calculator`) in 14 to 29 seconds over three runs. It answered that Jørn Utzon was born in 1918 and the building opened in 1973, 55 years later, and listed its sources. Plain chat gave the same years. It gave its own birth and opening dates, which differ from the dates in the sources the page shows.
+
+![The research mission, light theme](docs/research-done-light.png)
+
+![The research mission, dark theme](docs/research-done-dark.png)
+
+These two images were taken before the header badge was fixed: the offline corpus is selected, and the badge still says "live web tools". The runs themselves used the offline corpus.
+
+**Research mission with live tools: the Transformer paper.** The agent called `arxiv_search`, then `fetch_url` on the arXiv abstract page, in 3 steps and 15 seconds. It answered that the paper lists 8 authors, that the last author is Illia Polosukhin, and that version 1 was posted on 12 June 2017. The page's claim check marked that answer "not backed". It matches words and numbers literally and listed 1, 12, 2017 and 8 as not found in the retrieved text. Counting names is outside what it does, and the authors and the submission date are in the text the agent retrieved. This is a limit of the check.
+
+**Improvement lab: edit distance.** The model ran its own tests three times with `run_python`, found and fixed a bug in its recurrence, then submitted once. The lab scored the submission 1.00 (10 of 10 tests, 0.11 seconds on the large input) after 5 steps and 116 seconds. The model's final text says "In Round 1 I had a bug", which describes its tests before submitting. The lab recorded a single submitted round, so the score chart has one point. Plain chat on the same task ran out of the page's 4,096-token reply limit while thinking and produced no code. That limit is a page setting and says nothing about the model.
+
+Two problems found on that first run are fixed in this repository: the header badge did not follow the tools setting, and a failed server start showed only the end of the server log. The launcher now quotes the first real error with its line number.
 
 ## Running it
 
@@ -36,7 +53,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
   `gozer run --chips 2 --who "you:arex2" --reason "AREX-2 research lab" -- .venv/bin/python serve/serve_arex2.py --ui`
   The launcher refuses to boot the model without a lease (`TT_VISIBLE_DEVICES`), and it always stops the server it started. The package comes from `--run-sh`, `AREX2_RUN_SH` or `~/.cache/tt-model/models/episod/arex-2-p300/run.sh`. If a server already answers on the port it is used as it is.
 - **Page only, server already running.** `AREX2_URL=http://host:8000/v1 .venv/bin/python demo/app.py`
-- **No chip at all.** `.venv/bin/python tools/demo_stack.py`, open the page, choose *Offline corpus*. This uses the scripted stand-in model.
+- **No chip at all.** `.venv/bin/python tools/demo_stack.py`, open the page, choose *Offline corpus*. This serves a **scripted stand-in model**, and the page badge says `SCRIPTED-FAKE-MODEL (not AREX-2)`. It shows the page and runs the lab's sandbox. Nothing it writes is output of AREX-2.
 
 The page has no login. It binds to 127.0.0.1 unless you set `AREX2_UI_HOST=0.0.0.0`. A visitor can use the model and its tools. Web fetches go through a guard (see below) and code runs in a sandbox, but share it only on a network you trust.
 
@@ -55,9 +72,13 @@ The preset research missions were built by `tools/build_missions.py`, which read
 
 `.venv/bin/python -m pytest -q`. No test needs a chip or the network (the scripted server in `tests/fake_openai.py` streams tool calls and `reasoning_content`; the page is driven through `gradio_client`). Tests that run code skip on a kernel without Landlock. Every guard has a test that was watched failing under a mutation of the code (counts in `CLAUDE.md`).
 
-## What was not run
+## What was not tested
 
-Nothing here has run against the real model. The streaming client, the loop, the tools, the lab and the page were built and tested against a scripted server. Whether AREX-2 writes tool calls the `qwen3_coder` parser accepts, how often it stops inside its reasoning, how many steps a research mission takes, and how it scores in the lab are all unmeasured. `CLAUDE.md` lists the commands for a first real run. The claim check and the lab thresholds were chosen from the scripted runs and need a look at real output.
+- The other four research missions and two of the four lab tasks (`count_pairs` and `shortest_path`). `min_coins` ran once with the real model and scored full marks on its first submission. That run is not shown here.
+- Missions that run close to the step, token or time limits. The runs above used 3 to 5 of 12 steps.
+- More than one request at a time.
+- How accurate the claim check is on real answers beyond the three above, and whether the lab thresholds suit a task the model finds hard. Both lab tasks run so far scored full marks on their first submission, so the revise loop has not been seen end to end with a score that improves.
+- Starting the model from a package pulled from the Hugging Face Hub. The runs used an install built by the packaging check.
 
 ## Layout
 

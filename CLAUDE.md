@@ -33,11 +33,28 @@ The model is BAAI/AREX-2, brought up and packaged by tt-orchard (`arex-2-p300`, 
   `views` label wording changes; `evidence` second-source union check (rechecked one line later); `lab` slow edge (`>=` against `>` gives the same speed); `code_sandbox` read size (the file-size limit bounds it);
   the session's `running` flag in the final event (set again at the end of the pump) and `can_resume` without `final` (the loop clears it).
 
+## 2026-10-23: first real run, three fixes, and the repo made ready to publish
+Prompt (operator, through the parent session): publish a companion repository for the AREX-2 model card, with screenshots from the real model.
+- Ran the page against the published package `episod/arex-2-p300` (2 chips, drafter on, sampling on the device) for the first time. The tool calls parsed through the `qwen3_coder` parser and
+  `reasoning_content` came back. One research mission with the offline corpus (the Sydney Opera House architect; 4 steps; 14 to 29 s over three runs), one with live tools (the Transformer paper;
+  3 steps, 15 s) and one lab task (edit distance; the model ran three tests of its own and submitted once, 1.00, 116 s). `min_coins` also ran once and scored 1.00 on its first submission.
+  Plain chat on the edit-distance task ran out of the page's 4,096-token reply limit while thinking. The screenshots in `docs/` come from these runs; the stand-in screenshots are gone.
+- Bug 1 (found in the first screenshot): the header badge said "live web tools" while the Offline corpus radio was selected, because only the page load and the Check button refreshed it. The radio's
+  `change` now refreshes it. The test inspects the built app's events for a `change` on that radio that calls `check_server`. 3 mutations, all red. The two research screenshots predate the fix and
+  still show the stale badge; the README says so.
+- Bug 2 (found on the first boot, which failed): the launcher quoted the last 1,500 characters of the server log, which was vLLM's wrapper line "See root cause above". The cause was a kernel compile
+  failure far earlier. `serve_arex2.first_error` finds the first line that states an error (an exception line, a build or compile failure, a TT_THROW, a full disk), skips the wrapper and indented
+  traceback lines, and the launcher quotes it with its line number before the tail, in the early-exit and the deadline messages. Written from tt-orchard's `narrate.root_cause`, with its own tests built from the
+  real lines. 15 mutations; 1 survived (an unreadable log), which now has a test and is red.
+- The first real boot failed twice for a reason outside this repo: the shared disk was full (the base model's graft shard could not download), then a kernel compile failed. The retry passed.
+- `tools/screenshots.py` now writes to `docs/stand-in-check/` (git-ignored) so a stand-in screenshot cannot reach the README; `generated/` (the chip runtime's output in the working directory) is ignored.
+- Scrub: no home path, user name, token or host in any tracked file or commit. The author line of the commits is the operator's work address.
+- Suite: 512 passed.
+Not tested: the other four research missions and two of the four lab tasks; missions near the step or time limits; more than one request at a time; the claim check on more real answers (it marked the arXiv
+answer "not backed" although the authors and date were in the retrieved text); a lab run where the score improves over rounds; starting the model from a package pulled from the Hub.
+
 ## Not done
-- No run against the real model. First real run, on a free board (2 chips, one lease):
-  `gozer run --chips 2 --who "you:arex2" --reason "AREX-2 research lab, first real run" -- env AREX2_RUN_SH=<installed arex-2-p300 run.sh> .venv/bin/python serve/serve_arex2.py --ui`
-  A cold first boot took about 26 minutes in tt-orchard's stage 7 check; a warm one 100 to 240 s. Then check, in this order: (1) one research mission (watch that tool calls parse and `reasoning_content` streams);
-  (2) how often a reply is cut off at 4,096 tokens or stops inside its reasoning; (3) steps and minutes per preset; (4) the lab tasks (rounds and scores); (5) the plain-chat comparison; (6) the claim check on real answers.
+- A first real run happened on 2026-10-23 (see above). Longer missions, the other tasks and concurrent requests have not run against the real model.
 - The claim check thresholds (60%, 25%, window of 3) and the lab's speed limits are chosen values and need a look at real output.
-- No `package/` notes and no tt-model package. No GitHub repo, no Hugging Face upload.
+- No `package/` notes and no tt-model package. The repository is ready to publish at https://github.com/tsingletaryTT/tt-arex2-agent; it had no remote when this entry was written.
 - The page's own JavaScript is Gradio's; screenshots were taken with headless Chrome through playwright in a scratch venv (not a dependency of the repo).

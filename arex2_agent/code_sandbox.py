@@ -20,7 +20,7 @@ the caller passes `unsandboxed=True` (the operator's explicit flag).
 
 The restrictions are checked by `self_check()`, which runs a probe program inside the sandbox that tries to read a planted file and open a
 socket. A kernel that accepts the calls and enforces nothing fails that check. This is a precaution for code a model produces from a
-benchmark prompt, not a defence against an attacker with a kernel exploit.
+benchmark prompt. It gives no defence against an attacker with a kernel exploit.
 """
 from __future__ import annotations
 
