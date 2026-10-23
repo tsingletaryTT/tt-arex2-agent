@@ -213,6 +213,8 @@ def scorecard_html(agent: Optional[dict], plain: Optional[dict], expected_facts:
     if expected_facts:
         n = len(expected_facts)
         row("Mentions the expected facts", [f"{_found(d.get('answer', ''), expected_facts)} of {n}" for _, d in cols])
+    if any(d.get("lab_score") is not None for _, d in cols):
+        row("Lab score", [(f"{d['lab_score']:.2f}" if d.get("lab_score") is not None else "no code to score") for _, d in cols])
     row("Sources read", [f"{d.get('sources', 0)}" if name == "Agent" else "no sources (no tools)" for name, d in cols])
     row("Claims backed by retrieved text", [
         (f"{d['claims']['backed'] + d['claims']['computed']} of {d['claims']['total']}" if d.get("claims") and d["claims"]["total"] else "none to check") if name == "Agent"
@@ -279,3 +281,65 @@ def server_badge_html(url: str, model: Optional[str], mode: str) -> str:
     tools = ('<span class="badge warn">offline corpus: tools read a small bundled set of pages, no network</span>' if mode == "offline"
              else '<span class="badge">live web tools: Wikipedia, arXiv, fetch_url</span>')
     return f'<div class="arex">{server}{tools}</div>'
+
+
+# ---- the plain chat panel, the verified answer, Continue ---------------------------------------------------------------------------------
+
+def plain_html(plain: Optional[dict], live: dict, running: bool) -> str:
+    if plain is None and not running and not (live.get("reasoning") or live.get("content")):
+        return ""
+    head = '<div class="note"><b>Plain chat</b>: the same model, no tools, one shot.</div>'
+    if plain is None:
+        body = ""
+        if live.get("reasoning"):
+            body += f'<details open><summary>Reasoning so far ({len(live["reasoning"]):,} characters)</summary><pre>{_tail(live["reasoning"], 800)}</pre></details>'
+        body += f'<div class="answer">{esc(live.get("content", "")).replace(chr(10), "<br>") or "answering"}<span class="dots"></span></div>'
+        return f'<div class="arex">{head}{body}</div>'
+    reasoning = (f'<details><summary>Reasoning ({len(plain.get("reasoning") or ""):,} characters)</summary><pre>{_tail(plain.get("reasoning") or "", 1200)}</pre></details>'
+                 if plain.get("reasoning") else "")
+    answer = (f'<div class="answer">{esc(plain["answer"]).replace(chr(10), "<br>")}</div>' if plain.get("answer") else "")
+    ended = esc(STOP_TEXT.get(plain.get("stop_reason"), plain.get("stop_reason", "")))
+    return (f'<div class="arex">{head}{reasoning}{answer}<div class="note">{ended} {int(plain.get("completion_tokens") or 0):,} tokens in '
+            f'{float(plain.get("seconds") or 0):.0f} s.</div></div>')
+
+
+def expected_html(mission: dict) -> str:
+    v = (mission or {}).get("verified") or {}
+    if not (mission or {}).get("expected") or not v.get("quotes"):
+        return ""
+    quotes = "".join(f'<li>{safe_link(q.get("url", ""), q.get("url", "") or "computed here")}: “{esc(q.get("quote", ""))}”</li>' for q in v["quotes"])
+    note = f'<div class="note">{esc(v["note"])}</div>' if v.get("note") else ""
+    return (f'<div class="arex"><details><summary>Show the verified answer</summary><p>{esc(mission["expected"])}</p>'
+            f'<div class="note">Read from the sources below on {esc(v.get("read", ""))}.</div><ul>{quotes}</ul>{note}</details></div>')
+
+
+MAX_STEP_TOKENS = 32768
+
+
+def continue_kwargs(reason: str, settings) -> Optional[dict]:
+    """What Continue should extend for a stop reason, as keyword arguments for Session.resume, or None when there is nothing to continue."""
+    get = settings.get if isinstance(settings, dict) else (lambda k, d=None: getattr(settings, k, d))
+    if reason == "length":
+        cur = int(get("step_tokens", 4096))
+        new = min(cur * 2, MAX_STEP_TOKENS)
+        return {"step_tokens": new} if new > cur else None
+    if reason == "step_cap":
+        return {"extra_steps": 8}
+    if reason == "token_cap":
+        return {"extra_tokens": 30000}
+    if reason == "time_cap":
+        return {"extra_seconds": 900.0}
+    return None
+
+
+def continue_label(reason: str, settings) -> str:
+    kw = continue_kwargs(reason, settings)
+    if not kw:
+        return ""
+    if "step_tokens" in kw:
+        return f"Continue with a larger limit ({kw['step_tokens']:,} tokens per reply)"
+    if "extra_steps" in kw:
+        return f"Continue with {kw['extra_steps']} more steps"
+    if "extra_tokens" in kw:
+        return f"Continue with {kw['extra_tokens']:,} more tokens"
+    return f"Continue with {int(kw['extra_seconds'] // 60)} more minutes"

@@ -361,3 +361,88 @@ def test_a_claim_backed_by_two_sources_names_both():
 def test_the_second_source_name_is_escaped():
     c = evidence.Claim("A claim that has enough words in it to count.", "backed", "https://a/", "A", "page", "x", also_from=[("https://b/", BAD)])
     assert "<script" not in views.evidence_html([], [c], {"opened": 0, "never_opened": []})
+
+
+# ---- the plain chat panel, the verified answer, the lab score and Continue --------------------------------------------------------------------
+
+def test_the_plain_chat_panel_says_what_it_is_and_streams_the_live_text_escaped():
+    out = views.plain_html(None, {"reasoning": "thinking <b>x</b>", "content": ""}, running=True)
+    assert "same model, no tools, one shot" in out.lower() and "<b>x</b>" not in out and "&lt;b&gt;x" in out and "answering" in out.lower()
+    streaming = views.plain_html(None, {"reasoning": "", "content": BAD}, running=True)
+    assert "<script" not in streaming and "<img" not in streaming and "&lt;script&gt;" in streaming
+
+
+def test_a_finished_plain_chat_shows_its_answer_and_how_it_ended():
+    out = views.plain_html({"answer": "About 55 years.", "reasoning": "hmm", "stop_reason": "answered", "completion_tokens": 40, "seconds": 12.0}, {"reasoning": "", "content": ""}, running=False)
+    assert "About 55 years." in out and "Finished with an answer" in out
+
+
+def test_a_cut_off_plain_chat_says_the_thinking_budget_ran_out_and_shows_no_answer():
+    out = views.plain_html({"answer": "", "reasoning": "long thought", "stop_reason": "length", "completion_tokens": 4096, "seconds": 300.0}, {"reasoning": "", "content": ""}, running=False)
+    assert "thinking budget ran out" in out.lower()
+
+
+def test_no_plain_chat_and_not_running_shows_nothing():
+    assert views.plain_html(None, {"reasoning": "", "content": ""}, running=False) == ""
+
+
+def test_the_verified_answer_is_collapsed_and_shows_the_quotes_the_date_and_links():
+    m = {"expected": "55 years (born 1918, opened 1973)", "verified": {"read": "2026-10-22", "quotes": [{"url": "https://en.wikipedia.org/wiki/Sydney_Opera_House", "quote": "formally opened ... 1973"}]}}
+    out = views.expected_html(m)
+    assert "<details>" in out and "<details open" not in out and "55 years" in out and "2026-10-22" in out and 'href="https://en.wikipedia.org/wiki/Sydney_Opera_House"' in out
+    assert "formally opened" in out
+
+
+def test_the_verified_answer_escapes_everything_and_a_note_is_shown():
+    m = {"expected": BAD, "verified": {"read": BAD, "quotes": [{"url": "javascript:alert(1)", "quote": BAD}], "note": BAD}}
+    out = views.expected_html(m)
+    assert "<script" not in out and "<img" not in out and "href=\"javascript" not in out
+
+
+def test_a_mission_with_no_verification_shows_no_reveal_for_a_custom_mission():
+    assert views.expected_html({"id": "custom", "expected": "", "verified": {}}) == ""
+
+
+def test_the_scorecard_gets_a_lab_score_row_when_there_is_one():
+    out = views.scorecard_html(dict(AGENT, lab_score=0.97), dict(PLAIN, lab_score=0.31), None)
+    assert "Lab score" in out and "0.97" in out and "0.31" in out
+    assert "Lab score" not in views.scorecard_html(AGENT, PLAIN, None)
+
+
+def test_a_plain_chat_with_no_code_to_score_shows_a_dash_for_its_lab_score():
+    out = views.scorecard_html(dict(AGENT, lab_score=0.9), dict(PLAIN, lab_score=None), None)
+    assert "Lab score" in out and "no code to score" in out
+
+
+def test_continue_picks_what_to_extend_for_each_stop_reason():
+    s = {"step_tokens": 4096, "max_steps": 12, "max_tokens": 60000, "max_seconds": 1800.0}
+    assert views.continue_kwargs("length", s) == {"step_tokens": 8192}
+    assert views.continue_kwargs("step_cap", s) == {"extra_steps": 8}
+    assert views.continue_kwargs("token_cap", s) == {"extra_tokens": 30000}
+    assert views.continue_kwargs("time_cap", s) == {"extra_seconds": 900.0}
+    assert views.continue_kwargs("answered", s) is None and views.continue_kwargs("server_down", s) is None and views.continue_kwargs("cancelled", s) is None
+
+
+def test_the_larger_limit_is_capped_and_a_limit_already_at_the_cap_offers_nothing():
+    assert views.continue_kwargs("length", {"step_tokens": 20000}) == {"step_tokens": 32768}
+    assert views.continue_kwargs("length", {"step_tokens": 32768}) is None
+
+
+def test_the_continue_label_says_what_it_will_do():
+    assert "larger limit" in views.continue_label("length", {"step_tokens": 4096}).lower() and "8,192" in views.continue_label("length", {"step_tokens": 4096})
+    assert "8 more steps" in views.continue_label("step_cap", {})
+    assert views.continue_label("answered", {}) == ""
+
+
+def test_a_finished_plain_answer_with_markup_is_escaped():
+    out = views.plain_html({"answer": BAD, "reasoning": BAD, "stop_reason": "answered", "completion_tokens": 1, "seconds": 1.0}, {"reasoning": "", "content": ""}, running=False)
+    assert "<script" not in out and "<img" not in out and "&lt;script&gt;" in out
+
+
+def test_an_expected_answer_with_no_quotes_behind_it_is_not_offered():
+    assert views.expected_html({"expected": "55", "verified": {"read": "2026-10-22", "quotes": []}}) == ""
+
+
+def test_the_verification_note_is_shown_when_there_is_one():
+    m = {"expected": "x", "verified": {"read": "2026-10-22", "quotes": [{"url": "", "quote": "q"}], "note": "Wikipedia figures can change."}}
+    assert "Wikipedia figures can change." in views.expected_html(m)
