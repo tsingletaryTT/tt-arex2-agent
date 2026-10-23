@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -24,10 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import gradio as gr  # noqa: E402
 
-from arex2_agent import chat, lab, missions, session, views  # noqa: E402
+from arex2_agent import chat, export, lab, missions, session, views  # noqa: E402
 
 CUSTOM = "(write your own)"
 MAX_PROMPT = 4000
+EXPORT_DIR = Path(tempfile.gettempdir()) / "arex2-lab-exports"        # where "Download this run" files are written (the newest few are kept)
+LAB_PREFIX = "Improvement lab: "
 HEADER = ("<div class='arex'><div class='head'><h1>AREX-2 Research Lab</h1>"
           "<p>BAAI's 27B agent model, running on Tenstorrent Blackhole. It is trained to work in loops: look things up, run code, measure its own result, revise. "
           "This page runs that loop and shows every step. It is not a chat box.</p></div></div>")
@@ -69,8 +72,11 @@ page has no login.
 
 # ---- pure helpers (tested without a browser) --------------------------------------------------------------------------------------------
 
-def preset_choices(kinds) -> list:
-    return [(m["title"], m["id"]) for m in missions.all_missions() if m["kind"] in kinds] + [(CUSTOM, CUSTOM)]
+def preset_choices(kinds, strip_prefix: str = "") -> list:
+    """(label, id) pairs for a mission picker. `strip_prefix` is cut from the labels only, so a tab that already says what its missions are does not repeat it."""
+    def label(title: str) -> str:
+        return title[len(strip_prefix):] if strip_prefix and title.startswith(strip_prefix) else title
+    return [(label(m["title"]), m["id"]) for m in missions.all_missions() if m["kind"] in kinds] + [(CUSTOM, CUSTOM)]
 
 
 def mission_from_inputs(preset_id: Optional[str], text: str, allowed_kinds=("research", "compute")) -> dict:
@@ -138,6 +144,45 @@ def check_server(url: str, mode: str) -> str:
     return views.server_badge_html(url, model, "offline" if str(mode).startswith("Offline") else "online")
 
 
+def tools_label(mode) -> str:
+    """The tools the next run will use, in words, for the line beside each Run button."""
+    return "Tools: offline corpus (no network)" if str(mode).startswith("Offline") else "Tools: live web tools"
+
+
+def lock_run():
+    """While a run is going: Run is off, Stop is on, and the files of the last run are not offered (the run in progress will replace them)."""
+    return gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False), gr.update(interactive=False)
+
+
+def unlock_run():
+    return gr.update(interactive=True), gr.update(interactive=False)
+
+
+def prepare_export(sess):
+    """After a run ends: write its export and turn on Download and Copy. Nothing is offered for no session, a run still going, or a run with no end."""
+    off = (gr.update(value=None, interactive=False), gr.update(interactive=False), "")
+    if sess is None:
+        return off
+    snap = sess.snapshot()
+    if snap.get("running") or not snap.get("final"):
+        return off
+    path = export.write_export(snap, EXPORT_DIR)
+    if path is None:
+        return off
+    answer = snap.get("answer") or ""
+    return gr.update(value=str(path), interactive=True), gr.update(interactive=bool(answer)), answer
+
+
+COPY_JS = """(t) => { const text = t || '';
+  if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text); }
+  else { const a = document.createElement('textarea'); a.value = text; document.body.appendChild(a); a.select(); document.execCommand('copy'); a.remove(); }
+  return [text]; }"""
+
+
+def copied(text):
+    gr.Info("Answer copied")
+
+
 # ---- the page --------------------------------------------------------------------------------------------------------------------------
 
 def build_app(default_url: Optional[str] = None) -> gr.Blocks:
@@ -145,27 +190,36 @@ def build_app(default_url: Optional[str] = None) -> gr.Blocks:
     with gr.Blocks(title="AREX-2 Research Lab") as demo:
         gr.HTML(HEADER)
         badge = gr.HTML()
-        with gr.Accordion("Model server and budgets", open=False):
-            with gr.Row():
-                url = gr.Textbox(label="Model server address", value=url0, scale=3)
-                model = gr.Textbox(label="Model name (blank: ask the server)", value="", scale=2)
-                mode = gr.Radio(["Live web tools", "Offline corpus (no network)"], value="Live web tools", label="Tools")
-            with gr.Row():
-                max_steps = gr.Slider(1, 40, value=12, step=1, label="Steps")
-                max_tokens = gr.Slider(2000, 200000, value=60000, step=1000, label="Tokens generated in total")
-                minutes = gr.Slider(1, 240, value=30, step=1, label="Minutes")
-            with gr.Row():
-                step_tokens = gr.Slider(512, 32768, value=4096, step=256, label="Tokens per reply, thinking included")
-                temperature = gr.Slider(0.0, 1.5, value=0.6, step=0.05, label="Temperature")
-                top_p = gr.Slider(0.1, 1.0, value=0.95, step=0.05, label="Top-p")
-            check = gr.Button("Check the server", size="sm")
+        # A control sits in the container whose scope it has. Everything here applies to every run on both tabs; what belongs to one tab (the mission,
+        # the plain-chat box, Run and Stop, the tools line, the files of a finished run) is inside that tab.
+        with gr.Accordion("Settings for every run", open=False):
+            with gr.Column(elem_classes="settings-group"):
+                gr.Markdown("**Connection**")
+                with gr.Row():
+                    url = gr.Textbox(label="Model server address", value=url0, scale=4)
+                    check = gr.Button("Check the server", size="sm", scale=1, min_width=170, elem_classes="inline-action")
+                with gr.Row():
+                    model = gr.Textbox(label="Model name (blank: ask the server)", value="", scale=2)
+                    mode = gr.Radio(["Live web tools", "Offline corpus (no network)"], value="Live web tools", label="Tools", scale=2)
+            with gr.Column(elem_classes="settings-group"):
+                gr.Markdown("**Limits**")
+                with gr.Row():
+                    max_steps = gr.Slider(1, 40, value=12, step=1, label="Steps")
+                    max_tokens = gr.Slider(2000, 200000, value=60000, step=1000, label="Tokens generated in total")
+                    minutes = gr.Slider(1, 240, value=30, step=1, label="Minutes")
+            with gr.Column(elem_classes="settings-group"):
+                gr.Markdown("**Sampling**")
+                with gr.Row():
+                    step_tokens = gr.Slider(512, 32768, value=4096, step=256, label="Tokens per reply, thinking included")
+                    temperature = gr.Slider(0.0, 1.5, value=0.6, step=0.05, label="Temperature")
+                    top_p = gr.Slider(0.1, 1.0, value=0.95, step=0.05, label="Top-p")
         shared = [url, model, mode, max_steps, max_tokens, minutes, step_tokens, temperature, top_p]
         demo.load(check_server, [url, mode], badge)
         check.click(check_server, [url, mode], badge, queue=False)
         mode.change(check_server, [url, mode], badge, queue=False)     # the badge says which tools the next run uses, so it follows the radio
 
         def make_tab(kinds, lab_page: bool, default_compare: bool):
-            choices = preset_choices(kinds)
+            choices = preset_choices(kinds, LAB_PREFIX if lab_page else "")
             first = missions.get(choices[0][1]) if choices[0][1] != CUSTOM else None
             with gr.Row():
                 preset = gr.Dropdown(choices, value=choices[0][1], label="Mission", scale=2)
@@ -173,10 +227,16 @@ def build_app(default_url: Optional[str] = None) -> gr.Blocks:
             prompt = gr.Textbox(value=first["prompt"] if first else "", lines=6 if lab_page else 4, label="Mission text",
                                 interactive=not lab_page, info="Edit it freely; an edited preset runs as your own mission.")
             with gr.Row():
-                run_btn = gr.Button("Run", variant="primary")
-                stop_btn = gr.Button("Stop")
+                run_btn = gr.Button("Run", variant="primary", scale=3)
+                stop_btn = gr.Button("Stop", interactive=False, scale=1)               # on only while a run is going
                 cont_btn = gr.Button("Continue", visible=False)
-            notice, meters = gr.HTML(), gr.HTML()
+                tools_note = gr.Markdown(tools_label("Live web tools"), elem_classes="tools-note")      # what Run will use: the radio in the settings, said where the run starts
+            with gr.Row(equal_height=True):
+                notice = gr.HTML(scale=6)
+                download = gr.DownloadButton("Download this run", interactive=False, size="sm", scale=1, min_width=170)
+                copy_btn = gr.Button("Copy answer", interactive=False, size="sm", scale=1, min_width=130)
+            meters = gr.HTML()
+            answer_text = gr.Textbox(visible=False)                                      # the plain text of the answer, for Copy
             with gr.Row():
                 with gr.Column(scale=1):
                     gr.Markdown("#### The loop, step by step")
@@ -237,18 +297,30 @@ def build_app(default_url: Optional[str] = None) -> gr.Blocks:
             def stop(sess):
                 if sess is not None:
                     sess.cancel.set()
-            run_btn.click(run, [preset, prompt, *shared, compare, state], outs, api_name="run_lab" if lab_page else "run_research", concurrency_limit=3)
-            cont_btn.click(resume, [state], outs, api_name="resume_lab" if lab_page else "resume_research", concurrency_limit=3)
-            stop_btn.click(stop, [state], None, queue=False)
-            return preset
 
+            # Run and Continue: lock the buttons, run, unlock (also when the run was refused or failed), then offer the files of the finished run.
+            def chain(button, fn, inputs, api_name):
+                (button.click(lock_run, None, [run_btn, stop_btn, download, copy_btn], queue=False, api_name=False)
+                 .then(fn, inputs, outs, api_name=api_name, concurrency_limit=3)
+                 .then(unlock_run, None, [run_btn, stop_btn], queue=False, api_name=False)
+                 .then(prepare_export, [state], [download, copy_btn, answer_text], queue=False, api_name=False))
+            chain(run_btn, run, [preset, prompt, *shared, compare, state], "run_lab" if lab_page else "run_research")
+            chain(cont_btn, resume, [state], "resume_lab" if lab_page else "resume_research")
+            stop_btn.click(stop, [state], None, queue=False)
+            copy_btn.click(copied, [answer_text], None, js=COPY_JS, queue=False, api_name=False)
+            return preset, tools_note
+
+        notes = []
         with gr.Tabs():
             with gr.Tab("Research missions"):
-                make_tab(("research", "compute"), False, True)
+                notes.append(make_tab(("research", "compute"), False, True)[1])
             with gr.Tab("Improvement lab"):
-                make_tab(("lab",), True, True)
-            with gr.Tab("How to read this page"):
-                gr.Markdown(ABOUT)
+                notes.append(make_tab(("lab",), True, True)[1])
+        for note in notes:
+            demo.load(tools_label, mode, note)
+            mode.change(tools_label, mode, note, queue=False, api_name=False)
+        with gr.Accordion("How to read this page", open=False):
+            gr.Markdown(ABOUT)
     return demo
 
 

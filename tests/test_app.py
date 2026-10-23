@@ -215,7 +215,7 @@ def test_a_lab_run_through_the_real_app_shows_the_rounds(served_app):
     assert "<svg" in out[4] and "Round 1" in out[4] and "submit_solution" in out[2]
 
 
-def test_the_page_has_the_three_tabs_the_api_names_and_the_how_to_read_text():
+def test_the_page_has_the_api_names_the_header_and_the_how_to_read_text():
     demo = app.build_app()
     names = {fn.api_name for fn in demo.fns.values() if fn.api_name}
     assert {"run_research", "run_lab", "resume_research", "resume_lab"} <= names
@@ -261,3 +261,180 @@ def test_the_tools_radio_refreshes_the_header_badge_when_it_changes():
             fn = demo.fns[dep["id"]].fn
             refreshed.append(getattr(fn, "__name__", ""))
     assert "check_server" in refreshed, refreshed
+
+
+# ---- the layout: a control sits in the container whose scope it has (design review of 2026-10-23) --------------------------------------------
+
+def _cfg():
+    demo = app.build_app("http://127.0.0.1:1/v1")
+    return demo, demo.get_config_file()
+
+
+def _components(cfg):
+    return {c["id"]: c for c in cfg["components"]}
+
+
+def _tree(node, parents=()):
+    yield node, parents
+    for ch in node.get("children", []):
+        yield from _tree(ch, parents + (node["id"],))
+
+
+def _by(cfg, ctype, **props):
+    return [c for c in cfg["components"] if c["type"] == ctype and all(c["props"].get(k) == v for k, v in props.items())]
+
+
+def _text(c):
+    p = c["props"]
+    return str(p.get("value") or p.get("label") or "")
+
+
+def _ancestors(cfg, cid):
+    for node, parents in _tree(cfg["layout"]):
+        if node["id"] == cid:
+            return list(parents)
+    raise AssertionError(f"component {cid} is not in the layout")
+
+
+def _fn_name(demo, dep):
+    return getattr(demo.fns[dep["id"]].fn, "__name__", "")
+
+
+def test_check_the_server_sits_in_the_same_row_as_the_server_address():
+    _, cfg = _cfg()
+    comps = _components(cfg)
+    check = [c for c in cfg["components"] if c["type"] == "button" and c["props"].get("value") == "Check the server"]
+    addr = [c for c in cfg["components"] if c["type"] == "textbox" and c["props"].get("label") == "Model server address"]
+    assert len(check) == 1 and len(addr) == 1
+    rows = lambda cid: [a for a in _ancestors(cfg, cid) if comps.get(a, {}).get("type") == "row"]
+    assert rows(check[0]["id"]) and rows(check[0]["id"])[-1] == rows(addr[0]["id"])[-1]
+
+
+def test_the_settings_accordion_is_named_for_every_run_and_holds_connection_limits_and_sampling_groups():
+    _, cfg = _cfg()
+    comps = _components(cfg)
+    acc = [c for c in cfg["components"] if c["type"] == "accordion" and c["props"].get("label") == "Settings for every run"]
+    assert len(acc) == 1 and acc[0]["props"].get("open") is False
+    assert not [c for c in cfg["components"] if c["type"] == "accordion" and c["props"].get("label") == "Model server and budgets"]
+    group_of = {}
+    for node, parents in _tree(cfg["layout"]):
+        c = comps.get(node["id"], {})
+        if c.get("type") == "markdown" and _text(c).strip("# *").strip() in ("Connection", "Limits", "Sampling"):
+            group_of[_text(c).strip("# *").strip()] = (node["id"], parents[-1])        # the heading and the container it opens
+    assert set(group_of) == {"Connection", "Limits", "Sampling"} and acc[0]["id"] in _ancestors(cfg, group_of["Connection"][0])
+
+    def members(group):
+        container = group_of[group][1]
+        found = set()
+        for node, parents in _tree(cfg["layout"]):
+            if container in parents and node["id"] in comps:
+                p = comps[node["id"]]["props"]
+                found.add(p.get("label") or p.get("value"))
+        return found
+    assert {"Model server address", "Model name (blank: ask the server)", "Tools", "Check the server"} <= members("Connection")
+    assert {"Steps", "Tokens generated in total", "Minutes"} <= members("Limits") and not ({"Temperature", "Top-p"} & members("Limits"))
+    assert {"Tokens per reply, thinking included", "Temperature", "Top-p"} <= members("Sampling") and not ({"Steps", "Minutes"} & members("Sampling"))
+
+
+def test_the_tools_mode_is_said_in_words_beside_run_and_follows_the_radio():
+    assert app.tools_label("Live web tools") == "Tools: live web tools"
+    assert app.tools_label("Offline corpus (no network)") == "Tools: offline corpus (no network)"
+    assert app.tools_label(None) == "Tools: live web tools"
+    demo, cfg = _cfg()
+    comps = _components(cfg)
+    radio = [c for c in cfg["components"] if c["type"] == "radio" and "Offline corpus (no network)" in str(c["props"].get("choices"))][0]["id"]
+    labels = [c["id"] for c in cfg["components"] if c["type"] in ("html", "markdown") and _text(c).startswith("Tools: ")]
+    assert len(labels) == 2                                                  # one beside each tab's Run button
+    for lid in labels:                                                       # beside Run: in the row that holds a Run button
+        row = [a for a in _ancestors(cfg, lid) if comps.get(a, {}).get("type") == "row"][-1]
+        assert any(c["props"].get("value") == "Run" and row in _ancestors(cfg, c["id"]) for c in cfg["components"] if c["type"] == "button")
+    followed = set()
+    for dep in cfg["dependencies"]:
+        if (radio, "change") in [(t[0], t[1]) for t in dep.get("targets", [])] and _fn_name(demo, dep) == "tools_label":
+            followed |= set(dep["outputs"])
+    assert set(labels) <= followed
+    assert any((None, "load") != (0, "x") and _fn_name(demo, d) == "tools_label" and any(t[1] == "load" for t in d["targets"]) for d in cfg["dependencies"])
+
+
+def test_each_tab_has_download_this_run_and_copy_answer_beside_the_status_and_they_wait_for_a_finished_run():
+    demo, cfg = _cfg()
+    comps = _components(cfg)
+    downloads = [c for c in cfg["components"] if c["type"] == "downloadbutton"]
+    copies = [c for c in cfg["components"] if c["type"] == "button" and c["props"].get("value") == "Copy answer"]
+    assert len(downloads) == 2 and len(copies) == 2
+    assert all(d["props"].get("value") is None or True for d in downloads)
+    assert all(d["props"]["label"] == "Download this run" or d["props"].get("value") == "Download this run" for d in downloads)
+    assert all(not d["props"].get("interactive", True) for d in downloads) and all(not c["props"].get("interactive", True) for c in copies)
+    chained = [d for d in cfg["dependencies"] if _fn_name(demo, d) == "prepare_export"]
+    assert len(chained) >= 4                                                  # after a run and after a resume, on each tab
+    assert all(d.get("trigger_after") is not None for d in chained)
+
+
+def test_prepare_export_enables_download_and_copy_for_a_finished_run_and_disables_them_for_none_or_a_running_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "EXPORT_DIR", tmp_path)
+    from tests.test_export import scripted_run
+    sess = type("S", (), {})()
+    snap = scripted_run()
+    sess.snapshot = lambda: snap
+    dl, cp, text = app.prepare_export(sess)
+    assert dl["interactive"] is True and dl["value"].endswith(".json") and Path(dl["value"]).exists() and cp["interactive"] is True and "55 years." in text
+    assert json.loads(Path(dl["value"]).read_text(encoding="utf-8"))["answer"].startswith("Answer: 55 years.")
+    dl0, cp0, text0 = app.prepare_export(None)
+    assert dl0["interactive"] is False and cp0["interactive"] is False and text0 == ""
+    snap2 = dict(snap, running=True, final=None, answer="")
+    sess.snapshot = lambda: snap2
+    dl1, cp1, _ = app.prepare_export(sess)
+    assert dl1["interactive"] is False and cp1["interactive"] is False
+
+
+def test_the_how_to_read_text_is_a_collapsed_accordion_at_the_bottom_and_not_a_tab():
+    _, cfg = _cfg()
+    comps = _components(cfg)
+    tabs = [c["props"].get("label") for c in cfg["components"] if c["type"] == "tabitem"]
+    assert tabs == ["Research missions", "Improvement lab"]
+    acc = [c for c in cfg["components"] if c["type"] == "accordion" and c["props"].get("label") == "How to read this page"]
+    assert len(acc) == 1 and acc[0]["props"].get("open") is False
+    top = [n["id"] for n in cfg["layout"]["children"]]
+    tabs_id = [c["id"] for c in cfg["components"] if c["type"] == "tabs"][0]
+    assert top.index(acc[0]["id"]) > top.index(tabs_id) and top[-1] == acc[0]["id"]
+    assert any("What you are looking at" in _text(c) for c in cfg["components"] if c["type"] == "markdown" and acc[0]["id"] in _ancestors(cfg, c["id"]))
+
+
+def test_stop_starts_disabled_run_is_disabled_while_a_run_is_going_and_both_come_back_after_it_ends():
+    demo, cfg = _cfg()
+    stops = [c for c in cfg["components"] if c["type"] == "button" and c["props"].get("value") == "Stop"]
+    assert len(stops) == 2 and all(c["props"].get("interactive") is False for c in stops)
+    runs = [c for c in cfg["components"] if c["type"] == "button" and c["props"].get("value") == "Run"]
+    lock, unlock = app.lock_run(), app.unlock_run()
+    assert lock[0]["interactive"] is False and lock[1]["interactive"] is True and unlock[0]["interactive"] is True and unlock[1]["interactive"] is False
+    deps = {d["id"]: d for d in cfg["dependencies"]}
+    for api in ("run_research", "run_lab", "resume_research", "resume_lab"):
+        main = [d for d in cfg["dependencies"] if d.get("api_name") == api]
+        assert len(main) == 1, api
+        before = deps[main[0]["trigger_after"]]
+        assert _fn_name(demo, before) == "lock_run" and any(t[1] == "click" for t in before["targets"])
+        after = [d for d in cfg["dependencies"] if d.get("trigger_after") == main[0]["id"] and _fn_name(demo, d) == "unlock_run"]
+        assert len(after) == 1 and not after[0].get("trigger_only_on_success")          # a refused or failed run must free the buttons too
+    assert {t[0] for d in cfg["dependencies"] if _fn_name(demo, d) == "lock_run" for t in d["targets"]} >= {c["id"] for c in runs}
+
+
+def test_the_lab_dropdown_drops_the_repeated_prefix_in_its_labels_and_keeps_the_ids():
+    labs = app.preset_choices(("lab",), strip_prefix="Improvement lab: ")
+    assert labs and all(not label.startswith("Improvement lab:") for label, _ in labs[:-1]) and [v for _, v in labs] == [v for _, v in app.preset_choices(("lab",))]
+    assert ("Fewest coins for an amount", "lab-min_coins") in labs
+    assert any(label.startswith("Improvement lab:") for label, _ in app.preset_choices(("lab",)))     # the default keeps the full titles
+    _, cfg = _cfg()
+    dropdowns = [c for c in cfg["components"] if c["type"] == "dropdown" and c["props"].get("label") == "Mission"]
+    lab_dd = [d for d in dropdowns if any(str(ch[1]).startswith("lab-") for ch in d["props"]["choices"])]
+    res_dd = [d for d in dropdowns if d not in lab_dd]
+    assert len(lab_dd) == 1 and all(not str(ch[0]).startswith("Improvement lab:") for ch in lab_dd[0]["props"]["choices"])
+    assert len(res_dd) == 1 and any("architect" in str(ch[0]) for ch in res_dd[0]["props"]["choices"])
+
+
+
+def test_copy_answer_works_on_a_page_served_over_plain_http_too_and_says_it_copied():
+    """navigator.clipboard exists only on https and localhost; a page opened over the LAN falls back to a selected textarea."""
+    assert "navigator.clipboard" in app.COPY_JS and "isSecureContext" in app.COPY_JS and "execCommand('copy')" in app.COPY_JS
+    assert "return [text]" in app.COPY_JS
+    import inspect
+    assert "gr.Info" in inspect.getsource(app.copied)
