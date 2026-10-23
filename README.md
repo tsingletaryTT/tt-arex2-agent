@@ -16,8 +16,6 @@ Model: [`episod/arex-2-p300`](https://huggingface.co/episod/arex-2-p300) on 2 Bl
 
 **Improvement lab.** The part a chat box cannot show. The agent gets a coding task with hidden tests and a large input. It submits code with `submit_solution`. The lab runs it in a sandbox and returns a measured report: failed tests with their inputs, the runtime on the large input, any error. The agent revises. The chart shows the score per round, and plain chat's one-shot code is scored by the same harness. Score = 0.7 x correctness + 0.3 x speed (speed counts only when every test passes). The lab defines this score. It measures that task only.
 
-![The improvement lab: the model tests, fixes and submits an edit-distance solution](docs/lab-edit-distance-light.png)
-
 **Offline corpus.** A switch serves the tools from a small bundled set of Wikipedia and arXiv pages, with no network. The page badges it. It answers the preset missions and nothing else.
 
 **What it costs.** A thinking step can take minutes on a hard task, and a reply can be cut off at the per-step limit (the page default is 4,096 tokens, thinking included). The page says "the thinking budget ran out" and offers to continue with a larger limit. It also says when the model gave neither an answer nor a tool call. Speed depends on the package configuration: the [model card](https://huggingface.co/episod/arex-2-p300) lists the measured single-request decode speed with the drafter on and with it off. Several requests at once were not measured on the current package.
