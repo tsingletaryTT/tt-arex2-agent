@@ -95,9 +95,34 @@ def test_the_file_is_written_as_utf8_json_named_for_the_mission(tmp_path):
     assert export.write_export(None, tmp_path) is None
 
 
-def test_old_exports_are_pruned_so_the_folder_does_not_grow_without_end(tmp_path):
+
+def test_old_exports_are_pruned_oldest_first_and_exactly_the_newest_few_stay(tmp_path):
+    import os
     for i in range(export.KEEP + 5):
         p = tmp_path / f"arex2-run-custom-{i:04d}.json"
         p.write_text("{}")
-    export.write_export(scripted_run(), tmp_path)
-    assert len(list(tmp_path.glob("arex2-run-*.json"))) <= export.KEEP
+        os.utime(p, (1_000_000 + i, 1_000_000 + i))
+    other = tmp_path / "notes.txt"
+    other.write_text("not an export")
+    new = export.write_export(scripted_run(), tmp_path)
+    left = sorted(q.name for q in tmp_path.glob("arex2-run-*.json"))
+    assert len(left) == export.KEEP and new.name in left
+    assert "arex2-run-custom-0000.json" not in left and f"arex2-run-custom-{export.KEEP + 4:04d}.json" in left     # the oldest went, the newest old ones stayed
+    assert other.exists()                                                                                           # nothing else in the folder is touched
+
+
+def test_an_object_that_is_not_plain_data_is_written_as_redacted_text():
+    sn = scripted_run()
+    sn["steps"][0]["tools"][0]["text"] = ValueError("Authorization: Bearer leaked-in-an-exception at /home/carol/x.py")
+    sn["final"] = dict(sn["final"], detail=Path("/home/dave/run/out.txt"))
+    text = json.dumps(export.export_run(sn), ensure_ascii=False)
+    assert "leaked-in-an-exception" not in text and "carol" not in text and "dave" not in text and "Authorization" not in text
+
+
+def test_a_number_that_is_not_a_number_is_written_as_null_so_the_file_is_valid_json():
+    sn = scripted_run()
+    sn["steps"][0]["seconds"] = float("nan")
+    sn["steps"][1]["seconds"] = float("inf")
+    doc = export.export_run(sn)
+    assert doc["steps"][0]["seconds"] is None and doc["steps"][1]["seconds"] is None
+    json.dumps(doc, allow_nan=False)                                                                               # a strict parser would refuse NaN and Infinity
