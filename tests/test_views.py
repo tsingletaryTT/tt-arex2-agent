@@ -446,3 +446,9 @@ def test_an_expected_answer_with_no_quotes_behind_it_is_not_offered():
 def test_the_verification_note_is_shown_when_there_is_one():
     m = {"expected": "x", "verified": {"read": "2026-10-22", "quotes": [{"url": "", "quote": "q"}], "note": "Wikipedia figures can change."}}
     assert "Wikipedia figures can change." in views.expected_html(m)
+
+
+def test_a_claim_computed_from_a_calculation_alone_says_so_and_names_no_source():
+    c = evidence.Claim("The difference between 1973 and 1918 is 55 years.", "computed", evidence="1973 - 1918 = 55")
+    out = views.evidence_html([], [c], {"opened": 0, "never_opened": []})
+    assert "numbers from a calculation" in out and "1973 - 1918 = 55" in out and "computed from  and" not in out and "computed from None" not in out

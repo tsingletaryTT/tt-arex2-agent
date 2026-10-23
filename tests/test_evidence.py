@@ -235,3 +235,35 @@ def test_two_sources_that_add_only_a_little_together_stay_below_the_bar():
     b = Source("https://b.example/", "B", "page", "The navy owns a royal yacht.")
     (c,) = evidence.check_claims("Copenhagen harbour hosts every painted ship owned by the navy under royal protection through winter.", [a, b], [])
     assert c.status == "unbacked" and c.also_from == []
+
+
+# ---- a claim that only states the result of a calculation ---------------------------------------------------------------------------------
+
+def test_a_sentence_that_states_the_result_of_a_calculation_is_computed_when_all_its_numbers_are_in_that_calculation():
+    (c,) = evidence.check_claims("The difference between 1973 and 1918 is 55 years.", [OPERA, UTZON], ["1973 - 1918 = 55"])
+    assert c.status == "computed" and c.source_url == "" and "1973 - 1918 = 55" in c.evidence and c.missing_numbers == []
+
+
+def test_a_single_number_is_not_enough_to_call_a_sentence_computed():
+    (c,) = evidence.check_claims("The renovation cost about 55 thousand dollars in total.", [OPERA], ["1973 - 1918 = 55"])
+    assert c.status == "unbacked"
+
+
+def test_a_number_the_calculation_does_not_contain_leaves_the_sentence_unbacked():
+    (c,) = evidence.check_claims("The difference between 1973 and 1918 and 2000 is 55 years.", [OPERA], ["1973 - 1918 = 55"])
+    assert c.status == "unbacked" and "2000" in c.missing_numbers
+
+
+def test_numbers_split_over_two_separate_calculations_do_not_count():
+    (c,) = evidence.check_claims("The gap between 1973 and 1918 is 55 years and 3 months.", [OPERA], ["1973 - 1918 = 55", "12 / 4 = 3"])
+    assert c.status == "unbacked"
+
+
+def test_a_calculation_does_not_rescue_a_sentence_with_one_number():
+    (c,) = evidence.check_claims("Utzon designed it in 1957 according to the record.", [OPERA], ["1973 - 1918 = 55", "1957 + 1 = 1958"])
+    assert c.status == "unbacked"
+
+
+def test_a_backed_sentence_stays_backed_and_is_not_relabelled_computed():
+    (c,) = evidence.check_claims("The Sydney Opera House was formally opened on 20 October 1973.", [OPERA], ["20 + 1 = 21", "1973 - 1918 = 55"])
+    assert c.status == "backed"

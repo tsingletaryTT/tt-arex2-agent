@@ -87,9 +87,11 @@ class _Stretches:
 
 def check_claims(answer: str, sources: Iterable, computed_texts: Iterable[str] = ()) -> list:
     stretches = [_Stretches(s) for s in sources]
-    computed = set()
+    computed, calcs = set(), []
     for t in computed_texts:
-        computed |= _numbers(t)
+        nums = _numbers(t)
+        computed |= nums
+        calcs.append((t, nums))
     out = []
     for text in extract_claims(answer):
         cw, cn = _words(text), _numbers(text)
@@ -106,7 +108,11 @@ def check_claims(answer: str, sources: Iterable, computed_texts: Iterable[str] =
             if joined is not None:
                 best_hit, also = (joined[0], best_hit[1], best_hit[2], best_hit[3]), [(joined[1].source.url, joined[1].source.title)]
         if best_hit is None or best_hit[0] < COVERAGE:
-            out.append(Claim(text, "unbacked", missing_numbers=sorted(cn), coverage=best_hit[0] if best_hit else 0.0))
+            calc = _stated_calculation(cn, calcs)
+            if calc is not None:
+                out.append(Claim(text, "computed", evidence=calc.strip()[:300], coverage=best_hit[0] if best_hit else 0.0))
+            else:
+                out.append(Claim(text, "unbacked", missing_numbers=sorted(cn), coverage=best_hit[0] if best_hit else 0.0))
             continue
         cov, st, chunk, nums = best_hit
         missing = sorted(cn - nums)
@@ -137,6 +143,17 @@ def _second_source(cw: set, best_hit, stretches):
             if (best is None or union > best[0]) and union > len(cw & have) / len(cw):
                 best = (union, st)
     return best if best is not None and best[0] >= COVERAGE else None
+
+
+def _stated_calculation(claim_numbers: set, calcs: list):
+    """The text of a calculator or Python result that holds every number of a claim, when the claim has at least two numbers; else None.
+    A sentence like "The difference between 1973 and 1918 is 55 years" has few words a source could match, and the calculation backs it."""
+    if len(claim_numbers) < 2:
+        return None
+    for text, nums in calcs:
+        if claim_numbers <= nums:
+            return text
+    return None
 
 
 def summarize(claims) -> dict:

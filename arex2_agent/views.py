@@ -176,6 +176,8 @@ def evidence_html(sources: Iterable, claims: Iterable, cited: dict) -> str:
             names = esc(c.source_title or c.source_url) + "".join(f" and {esc(title or url)}" for url, title in getattr(c, "also_from", []))
             if c.status == "backed":
                 chip = f'<span class="chip backed">backed by {names}</span>'
+            elif c.status == "computed" and not (c.source_title or c.source_url):
+                chip = '<span class="chip computed">computed: numbers from a calculation</span>'
             elif c.status == "computed":
                 chip = f'<span class="chip computed">computed from {names} and a calculation</span>'
             else:
