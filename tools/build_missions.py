@@ -18,6 +18,7 @@ import datetime
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -44,6 +45,7 @@ class Reader:
 
     def wiki(self, title: str):
         if title not in self.pages:
+            time.sleep(1.5)                  # Wikipedia rate-limits quick bursts
             r = self.tb.run("wikipedia_page", json.dumps({"title": title}))
             if not r.ok:
                 raise SystemExit(f"cannot read {title!r}: {r.text}")

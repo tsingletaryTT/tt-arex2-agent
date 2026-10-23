@@ -451,3 +451,24 @@ def test_a_rate_limit_that_survives_the_retries_reaches_the_model_as_a_plain_too
         raise _http_error(429)
     r = call(box(http), "wikipedia_search", query="x")
     assert not r.ok and "429" in r.text
+
+
+def test_a_503_is_retried_too():
+    calls = []
+    def opener(req, timeout=None):
+        calls.append(1)
+        if len(calls) == 1:
+            raise _http_error(503, retry_after=1)
+        return _Resp(b"back")
+    assert tools.default_http("https://x/", _open=opener, _sleep=lambda s: None) == "back"
+
+
+def test_a_retry_after_that_is_a_date_not_a_number_falls_back_to_the_default_wait():
+    sleeps = []
+    def opener(req, timeout=None):
+        if not sleeps:
+            err = _http_error(429)
+            err.headers["Retry-After"] = "Wed, 21 Oct 2026 07:28:00 GMT"
+            raise err
+        return _Resp(b"fine")
+    assert tools.default_http("https://x/", _open=opener, _sleep=sleeps.append) == "fine" and sleeps == [tools.DEFAULT_RETRY_WAIT_S]
