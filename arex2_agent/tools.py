@@ -225,13 +225,17 @@ class Toolbox:
             return "jina"
         return None
 
+    def defs(self) -> dict:
+        """name -> (description, properties, required); a subclass can offer a different set."""
+        return DEFS
+
     def names(self) -> list:
-        return [n for n in DEFS if n != "web_search" or self._search_backend()]
+        return [n for n in self.defs() if n != "web_search" or self._search_backend()]
 
     def specs(self) -> list:
         out = []
         for n in self.names():
-            desc, props, req = DEFS[n]
+            desc, props, req = self.defs()[n]
             out.append({"type": "function", "function": {"name": n, "description": desc,
                                                           "parameters": {"type": "object", "properties": props, "required": req}}})
         return out
@@ -244,10 +248,10 @@ class Toolbox:
             args = json.loads(arguments) if arguments and arguments.strip() else {}
         except ValueError as e:
             return ToolResult(f"The arguments for {name} are not valid JSON ({e}). Send one JSON object, for example "
-                              f"{json.dumps({k: '...' for k in DEFS[name][2]})}.", ok=False, summary="bad JSON arguments")
+                              f"{json.dumps({k: '...' for k in self.defs()[name][2]})}.", ok=False, summary="bad JSON arguments")
         if not isinstance(args, dict):
             return ToolResult(f"The arguments for {name} must be a JSON object, not {type(args).__name__}.", ok=False, summary="arguments not an object")
-        _, props, required = DEFS[name]
+        _, props, required = self.defs()[name]
         for key in required:
             if key not in args:
                 return ToolResult(f"{name} needs the argument {key!r}.", ok=False, summary=f"missing {key}")
