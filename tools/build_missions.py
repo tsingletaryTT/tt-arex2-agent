@@ -38,6 +38,9 @@ def sentence_with(text: str, pattern: str) -> str:
     return re.sub(r"\s+", " ", text[start:end]).strip()
 
 
+CACHE = Path(__file__).resolve().parent / ".cache"       # fetched pages, so a re-run after a rate limit only fetches what is missing
+
+
 class Reader:
     def __init__(self):
         self.tb = tools.Toolbox(env={})
@@ -45,11 +48,19 @@ class Reader:
 
     def wiki(self, title: str):
         if title not in self.pages:
-            time.sleep(1.5)                  # Wikipedia rate-limits quick bursts
+            f = CACHE / (re.sub(r"\W+", "_", title) + ".json")
+            if f.exists():
+                d = json.loads(f.read_text(encoding="utf-8"))
+                self.pages[title] = tools.Source(d["url"], d["title"], d["kind"], d["text"], d.get("tool", ""))
+                return self.pages[title]
+            time.sleep(4)                    # Wikipedia rate-limits quick bursts
             r = self.tb.run("wikipedia_page", json.dumps({"title": title}))
             if not r.ok:
                 raise SystemExit(f"cannot read {title!r}: {r.text}")
-            self.pages[title] = r.sources[0]
+            src = r.sources[0]
+            CACHE.mkdir(exist_ok=True)
+            f.write_text(json.dumps(src.__dict__, ensure_ascii=False), encoding="utf-8")
+            self.pages[title] = src
         return self.pages[title]
 
     def arxiv(self, query: str):
@@ -87,7 +98,7 @@ def build():
     missions.append({"id": "opera-utzon", "title": "How old was the architect when the building opened?", "kind": "research",
                      "prompt": "The architect of the Sydney Opera House was born in one year and the building was formally opened in another. How many years before the "
                                "opening was he born? Give both years and the difference, with your sources.",
-                     "expected": f"{opened - born} years (born {born}, formally opened {opened})", "facts": [str(born), str(opened), str(opened - born)],
+                     "expected": f"{opened - born} years (born {born}, formally opened {opened})", "facts": [str(born), str(opened), str(opened - born)], "derived": [str(opened - born)],
                      "needs": ["wikipedia_page", "calculator"], "plain_chat_risk": "It may remember one of the years wrongly, or the difference.",
                      "verified": {"read": today, "quotes": [{"url": opera.url, "quote": q1[0]}, {"url": utzon.url, "quote": q2[0]}]}})
 
@@ -103,7 +114,7 @@ def build():
     missions.append({"id": "ada-byron", "title": "Ada Lovelace's age when her father died", "kind": "research",
                      "prompt": "How old was Ada Lovelace when her father died? Say who her father was, give the two dates you used, and work out her age in whole years.",
                      "expected": f"{age} years old (born {b.isoformat()}, her father Lord Byron died {d.isoformat()})",
-                     "facts": ["Byron", str(b.year), str(d.year), str(age)], "needs": ["wikipedia_page", "calculator"],
+                     "facts": ["Byron", str(b.year), str(d.year), str(age)], "derived": [str(age)], "needs": ["wikipedia_page", "calculator"],
                      "plain_chat_risk": "It may know the dates roughly and get the age or the exact dates wrong.",
                      "verified": {"read": today, "quotes": [{"url": ada.url, "quote": q3[0]}, {"url": byron.url, "quote": q4[0]}]}})
 
@@ -118,7 +129,7 @@ def build():
                      "prompt": "According to Wikipedia, by how many metres is Mount Everest higher than K2, and what is that difference as a percentage of Everest's height "
                                "(one decimal place)? Quote both heights.",
                      "expected": f"{diff} m, about {pct}% (Everest {ev_h} m, K2 {k2_h:g} m, as Wikipedia states them on {today})",
-                     "facts": [f"{ev_h:g}".replace(".0", ""), f"{k2_h:g}", str(pct)], "needs": ["wikipedia_page", "calculator"],
+                     "facts": [f"{ev_h:g}", f"{k2_h:g}", str(pct)], "derived": [str(pct)], "needs": ["wikipedia_page", "calculator"],
                      "plain_chat_risk": "Heights have several published values; the mission asks for the ones on the page, and the percentage needs exact arithmetic.",
                      "verified": {"read": today, "quotes": [{"url": ev.url, "quote": q5[0]}, {"url": k2.url, "quote": q6[0]}], "note": "Wikipedia figures can change; the expected answer is as of the date read."}})
 
@@ -130,7 +141,7 @@ def build():
     missions.append({"id": "oscars-director", "title": "The Best Picture director's birth year", "kind": "research",
                      "prompt": "Which film won Best Picture at the 70th Academy Awards, who directed it, and in what year was that director born? "
                                "Then say how many years before the year 2000 that was.",
-                     "expected": f"Titanic, directed by James Cameron, born {cam_born}; {2000 - cam_born} years before 2000", "facts": ["Titanic", "Cameron", str(cam_born), str(2000 - cam_born)],
+                     "expected": f"Titanic, directed by James Cameron, born {cam_born}; {2000 - cam_born} years before 2000", "facts": ["Titanic", "Cameron", str(cam_born), str(2000 - cam_born)], "derived": [str(2000 - cam_born)],
                      "needs": ["wikipedia_page", "calculator"], "plain_chat_risk": "Three lookups in a chain; a slip in the first one changes everything after it.",
                      "verified": {"read": today, "quotes": [{"url": oscars.url, "quote": q7[0]}, {"url": titanic.url, "quote": q8[0]}, {"url": cam.url, "quote": q9[0]}]}})
 
@@ -140,11 +151,13 @@ def build():
     authors = re.search(r"^\s*Authors: (.*)$", r.text, re.M).group(1).split(", ")
     if len(authors) != 8 or authors[-1] != "Illia Polosukhin":
         raise SystemExit(f"unexpected author list for the attention paper: {authors}")
-    corpus.append({"id": "attention_is_all_you_need", "title": src.title, "url": re.sub(r"v\d+$", "", src.url),
-                   "kind": "arxiv", "text": src.text[:KEEP], "license": "arXiv abstract", "read": today})
+    posted = re.search(r"\((\d{4}-\d{2}-\d{2})\)", r.text).group(1)
+    corpus.append({"id": "attention_is_all_you_need", "title": src.title, "url": re.sub(r"v\d+$", "", src.url), "kind": "arxiv",
+                   "text": (src.text.split(". Authors:", 1)[0] + f". Posted {posted}. Authors:" + src.text.split(". Authors:", 1)[1])[:KEEP],
+                   "license": "arXiv abstract", "read": today})
     missions.append({"id": "attention-authors", "title": "Who wrote the Transformer paper", "kind": "research",
                      "prompt": "Find the arXiv paper 'Attention Is All You Need'. How many authors does it list, who is listed last, and in what year was the first version posted?",
-                     "expected": f"{len(authors)} authors, last {authors[-1]}; first posted 2017", "facts": [str(len(authors)), authors[-1], "2017"], "needs": ["arxiv_search"],
+                     "expected": f"{len(authors)} authors, last {authors[-1]}; first posted {posted[:4]}", "facts": [str(len(authors)), authors[-1], posted[:4]], "derived": [str(len(authors))], "needs": ["arxiv_search"],
                      "plain_chat_risk": "A model often knows the paper and still miscounts or misorders the author list.",
                      "verified": {"read": today, "quotes": [{"url": src.url, "quote": src.text[:200]}]}})
 
@@ -152,7 +165,7 @@ def build():
     digits = sum(int(c) for c in str(2 ** 1000))
     missions.append({"id": "digits-2-1000", "title": "Digits of a large power", "kind": "compute",
                      "prompt": "What is the sum of the decimal digits of 2 to the power 1000? Then say whether 2 to the power 1000 is divisible by 7, and show how you checked.",
-                     "expected": f"{digits}; not divisible by 7 (2^n mod 7 is 1, 2 or 4)", "facts": [str(digits), "not"], "needs": ["run_python"],
+                     "expected": f"{digits}; not divisible by 7 (2^n mod 7 is 1, 2 or 4)", "facts": [str(digits), "not"], "derived": [str(digits)], "needs": ["run_python"],
                      "plain_chat_risk": "A 302-digit number cannot be added up reliably from memory or by reasoning alone.",
                      "verified": {"read": today, "quotes": [{"url": "", "quote": f"computed here: sum of digits of 2**1000 = {digits}; 2**1000 % 7 = {2 ** 1000 % 7}"}]}})
 

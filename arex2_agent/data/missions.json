@@ -1,0 +1,196 @@
+[
+ {
+  "id": "opera-utzon",
+  "title": "How old was the architect when the building opened?",
+  "kind": "research",
+  "prompt": "The architect of the Sydney Opera House was born in one year and the building was formally opened in another. How many years before the opening was he born? Give both years and the difference, with your sources.",
+  "expected": "55 years (born 1918, formally opened 1973)",
+  "facts": [
+   "1918",
+   "1973",
+   "55"
+  ],
+  "derived": [
+   "55"
+  ],
+  "needs": [
+   "wikipedia_page",
+   "calculator"
+  ],
+  "plain_chat_risk": "It may remember one of the years wrongly, or the difference.",
+  "verified": {
+   "read": "2026-10-22",
+   "quotes": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Sydney_Opera_House",
+     "quote": "Designed by Danish architect Jørn Utzon and completed by an Australian architectural team headed by Peter Hall, the building was formally opened by Queen Elizabeth II on 20 October 1973, 16 years after Utzon's 1957 selection as winner of an international design competition."
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/J%C3%B8rn_Utzon",
+     "quote": "Jørn Oberg Utzon (Danish: [ˈjɶɐ̯ˀn ˈut.sʌn]; 9 April 1918 – 29 November 2008) was a Danish architect."
+    }
+   ]
+  }
+ },
+ {
+  "id": "ada-byron",
+  "title": "Ada Lovelace's age when her father died",
+  "kind": "research",
+  "prompt": "How old was Ada Lovelace when her father died? Say who her father was, give the two dates you used, and work out her age in whole years.",
+  "expected": "8 years old (born 1815-12-10, her father Lord Byron died 1824-04-19)",
+  "facts": [
+   "Byron",
+   "1815",
+   "1824",
+   "8"
+  ],
+  "derived": [
+   "8"
+  ],
+  "needs": [
+   "wikipedia_page",
+   "calculator"
+  ],
+  "plain_chat_risk": "It may know the dates roughly and get the age or the exact dates wrong.",
+  "verified": {
+   "read": "2026-10-22",
+   "quotes": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Ada_Lovelace",
+     "quote": "Augusta Ada King, Countess of Lovelace (née Byron; 10 December 1815 – 27 November 1852), also known as Ada Lovelace, was an English mathematician and writer chiefly known for work on Charles Babbage's proposed mechanical general-purpose computer, the analytical engine."
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Lord_Byron",
+     "quote": "George Noel Gordon Byron, 6th Baron Byron (22 January 1788 – 19 April 1824), was a British poet."
+    }
+   ]
+  }
+ },
+ {
+  "id": "everest-k2",
+  "title": "Everest against K2",
+  "kind": "research",
+  "prompt": "According to Wikipedia, by how many metres is Mount Everest higher than K2, and what is that difference as a percentage of Everest's height (one decimal place)? Quote both heights.",
+  "expected": "237.86 m, about 2.7% (Everest 8848.86 m, K2 8611 m, as Wikipedia states them on 2026-10-22)",
+  "facts": [
+   "8848.86",
+   "8611",
+   "2.7"
+  ],
+  "derived": [
+   "2.7"
+  ],
+  "needs": [
+   "wikipedia_page",
+   "calculator"
+  ],
+  "plain_chat_risk": "Heights have several published values; the mission asks for the ones on the page, and the percentage needs exact arithmetic.",
+  "verified": {
+   "read": "2026-10-22",
+   "quotes": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Mount_Everest",
+     "quote": "Its height was most recently measured in 2020 through a joint survey by Nepalese and Chinese authorities as 8,848.86 m (29,031 ft 8+1⁄2 in)."
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/K2",
+     "quote": "K2, also known as Mount Godwin-Austen, at 8,611 metres (28,251 ft) above sea level, is the second-highest mountain on Earth, after Mount Everest at 8,849 metres (29,032 ft)."
+    }
+   ],
+   "note": "Wikipedia figures can change; the expected answer is as of the date read."
+  }
+ },
+ {
+  "id": "oscars-director",
+  "title": "The Best Picture director's birth year",
+  "kind": "research",
+  "prompt": "Which film won Best Picture at the 70th Academy Awards, who directed it, and in what year was that director born? Then say how many years before the year 2000 that was.",
+  "expected": "Titanic, directed by James Cameron, born 1954; 46 years before 2000",
+  "facts": [
+   "Titanic",
+   "Cameron",
+   "1954",
+   "46"
+  ],
+  "derived": [
+   "46"
+  ],
+  "needs": [
+   "wikipedia_page",
+   "calculator"
+  ],
+  "plain_chat_risk": "Three lookups in a chain; a slip in the first one changes everything after it.",
+  "verified": {
+   "read": "2026-10-22",
+   "quotes": [
+    {
+     "url": "https://en.wikipedia.org/wiki/70th_Academy_Awards",
+     "quote": "Titanic won 11 awards, including Best Picture, a number that is tied with Ben-Hur and The Lord of the Rings: The Return of the King."
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Titanic_(1997_film)",
+     "quote": "Titanic is a 1997 American epic historical romance film written and directed by James Cameron."
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/James_Cameron",
+     "quote": "James Francis Cameron (born August 16, 1954) is a Canadian and New Zealand filmmaker and explorer."
+    }
+   ]
+  }
+ },
+ {
+  "id": "attention-authors",
+  "title": "Who wrote the Transformer paper",
+  "kind": "research",
+  "prompt": "Find the arXiv paper 'Attention Is All You Need'. How many authors does it list, who is listed last, and in what year was the first version posted?",
+  "expected": "8 authors, last Illia Polosukhin; first posted 2017",
+  "facts": [
+   "8",
+   "Illia Polosukhin",
+   "2017"
+  ],
+  "derived": [
+   "8"
+  ],
+  "needs": [
+   "arxiv_search"
+  ],
+  "plain_chat_risk": "A model often knows the paper and still miscounts or misorders the author list.",
+  "verified": {
+   "read": "2026-10-22",
+   "quotes": [
+    {
+     "url": "https://arxiv.org/abs/1706.03762v7",
+     "quote": "Attention Is All You Need. Authors: Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin. The dominant sequence transduction models "
+    }
+   ]
+  }
+ },
+ {
+  "id": "digits-2-1000",
+  "title": "Digits of a large power",
+  "kind": "compute",
+  "prompt": "What is the sum of the decimal digits of 2 to the power 1000? Then say whether 2 to the power 1000 is divisible by 7, and show how you checked.",
+  "expected": "1366; not divisible by 7 (2^n mod 7 is 1, 2 or 4)",
+  "facts": [
+   "1366",
+   "not"
+  ],
+  "derived": [
+   "1366"
+  ],
+  "needs": [
+   "run_python"
+  ],
+  "plain_chat_risk": "A 302-digit number cannot be added up reliably from memory or by reasoning alone.",
+  "verified": {
+   "read": "2026-10-22",
+   "quotes": [
+    {
+     "url": "",
+     "quote": "computed here: sum of digits of 2**1000 = 1366; 2**1000 % 7 = 2"
+    }
+   ]
+  }
+ }
+]
