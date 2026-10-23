@@ -10,7 +10,7 @@ Model: [`episod/arex-2-p300`](https://huggingface.co/episod/arex-2-p300) on 2 Bl
 ## What it shows
 
 **Research missions.** The agent searches Wikipedia and arXiv, reads pages, calculates, runs Python, and answers with sources.
-- *The loop*: every step with its reasoning, the tool it called, the arguments, the result, the tokens and the seconds. Budgets for steps, tokens and time have meters and a stop button.
+- *The loop*: every step with its reasoning, the tool it called, the arguments, the result, the tokens and the seconds. Budgets for steps, tokens and time have meters. Stop is on only while a run is going.
 - *The evidence board*: every source the agent opened, with the text it read. Each claim in the final answer is marked **backed** (words and numbers appear together in retrieved text), **computed** (the numbers come from a calculation) or **not backed**. An address the answer cites but the agent never opened is flagged. This is a string match. It does not judge whether a source is right.
 - *Agent against plain chat*: the same question goes to the same model once, with no tools, at the same settings. The scorecard counts sources, claims backed, steps, tokens and time. For the preset missions it also counts how many of the facts checked on Wikipedia or arXiv at build time each answer mentions. That row is a string match. It is not a grade.
 
@@ -20,7 +20,22 @@ Model: [`episod/arex-2-p300`](https://huggingface.co/episod/arex-2-p300) on 2 Bl
 
 **What it costs.** A thinking step can take minutes on a hard task, and a reply can be cut off at the per-step limit (the page default is 4,096 tokens, thinking included). The page says "the thinking budget ran out" and offers to continue with a larger limit. It also says when the model gave neither an answer nor a tool call. Speed depends on the package configuration: the [model card](https://huggingface.co/episod/arex-2-p300) lists the measured single-request decode speed with the drafter on and with it off. Several requests at once were not measured on the current package.
 
+## Using the page
+
+**Settings for every run** is one accordion, closed by default, and it applies to both tabs. It has three groups:
+- *Connection*: the model server address with **Check the server** beside it, the model name (blank asks the server), and the tools, either live web tools or the offline corpus.
+- *Limits*: steps, tokens generated in total, and minutes.
+- *Sampling*: tokens per reply (thinking included), temperature and top-p.
+
+Each tab holds what belongs to one run: the mission, the plain-chat box, and **Run** and **Stop**. Run is off while a run is going, and Stop is on only then. A line beside the buttons says which tools the next run will use ("Tools: live web tools" or "Tools: offline corpus (no network)"). It follows the radio in the settings.
+
+When a run ends, **Download this run** and **Copy answer** turn on beside the status line. Download writes one JSON file with the mission, the settings, every step (reasoning, tool call, arguments, result, tokens, seconds), the answer, the evidence rows, the claim check, the lab rounds and the scorecard. The file has no credentials, no home directories and no login from the server address, and a model name that is a path is cut to its last part. Copy puts the answer text on the clipboard, also on a page opened over plain http, where the browser's clipboard interface is not available. The last twenty downloads are kept in the system temporary folder and older ones are removed.
+
+**How to read this page** is a closed accordion at the bottom.
+
 ## What ran on the real model
+
+> The screenshots below show the layout before this change. The settings were one accordion called "Model server and budgets", the Check button was under the sliders, the "How to read this page" text was a tab, and there were no Download or Copy buttons. They will be retaken with the real model.
 
 On 2026-10-23 the page ran against the published package `episod/arex-2-p300` (2 chips, speculative drafter on, sampling on the device). The model's tool calls parsed correctly through vLLM's `qwen3_coder` parser, and its reasoning came back in `reasoning_content`. These are one run of each kind. They show what the page does with the real model and are not a benchmark.
 
@@ -82,4 +97,4 @@ The preset research missions were built by `tools/build_missions.py`, which read
 
 ## Layout
 
-`arex2_agent/` the library (`chat`, `agent`, `tools`, `netguard`, `code_sandbox`, `evidence`, `lab`, `session`, `missions`, `views`), `demo/app.py` the page, `serve/serve_arex2.py` the launcher, `tools/` the preset builder, the scripted model and the screenshot script, `tests/`. Licence: Apache-2.0. The bundled corpus is trimmed Wikipedia text under CC BY-SA 4.0 with each entry's address kept.
+`arex2_agent/` the library (`chat`, `agent`, `tools`, `netguard`, `code_sandbox`, `evidence`, `lab`, `session`, `missions`, `views`, `export`), `demo/app.py` the page, `serve/serve_arex2.py` the launcher, `tools/` the preset builder, the scripted model and the layout check script (it writes to `docs/stand-in-check/`, which git ignores), `tests/`. Licence: Apache-2.0. The bundled corpus is trimmed Wikipedia text under CC BY-SA 4.0 with each entry's address kept.

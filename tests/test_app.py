@@ -460,3 +460,37 @@ def test_download_and_copy_are_compact_buttons_and_the_status_banner_takes_the_r
         assert len(btn) == 2 and all(b["props"].get("scale") == 0 for b in btn), label
     notices = [c for c in cfg["components"] if c["type"] == "html" and c["props"].get("scale") == 1]
     assert len(notices) == 2
+
+
+def test_starting_a_run_locks_run_and_clears_the_files_of_the_last_run_on_that_tab():
+    demo, cfg = _cfg()
+    comps = _components(cfg)
+    for api in ("run_research", "run_lab", "resume_research", "resume_lab"):
+        main = [d for d in cfg["dependencies"] if d.get("api_name") == api][0]
+        lock = {d["id"]: d for d in cfg["dependencies"]}[main["trigger_after"]]
+        types = sorted(comps[o]["type"] for o in lock["outputs"])
+        assert types == ["button", "button", "button", "downloadbutton"], (api, types)      # Run, Stop, Copy answer and Download this run
+
+
+def test_a_finished_run_with_no_answer_offers_the_download_but_not_copy(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "EXPORT_DIR", tmp_path)
+    from tests.test_export import scripted_run
+    snap = dict(scripted_run(), answer="", final={"stop_reason": "step_cap", "detail": "", "answer": "", "steps": 12, "completion_tokens": 1, "seconds": 1.0, "sources": 0})
+    sess = type("S", (), {"snapshot": lambda self: snap})()
+    dl, cp, text = app.prepare_export(sess)
+    assert dl["interactive"] is True and cp["interactive"] is False and text == ""
+
+
+def test_nothing_is_offered_while_a_run_is_going_even_when_an_older_final_is_still_in_the_snapshot(tmp_path, monkeypatch):
+    monkeypatch.setattr(app, "EXPORT_DIR", tmp_path)
+    from tests.test_export import scripted_run
+    snap = dict(scripted_run(), running=True)                  # the earlier run's final is still there: the resumed run has not replaced it yet
+    assert snap["final"]
+    sess = type("S", (), {"snapshot": lambda self: snap})()
+    dl, cp, text = app.prepare_export(sess)
+    assert dl["interactive"] is False and cp["interactive"] is False and text == "" and not list(tmp_path.iterdir())
+
+
+def test_the_exports_go_to_their_own_folder_and_not_the_bare_temporary_directory():
+    import tempfile
+    assert app.EXPORT_DIR != Path(tempfile.gettempdir()) and app.EXPORT_DIR.parent == Path(tempfile.gettempdir()) and "arex2" in app.EXPORT_DIR.name

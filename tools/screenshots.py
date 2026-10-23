@@ -16,12 +16,12 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-OUT = Path(__file__).resolve().parent.parent / "docs" / "stand-in-check"
+OUT = Path(__file__).resolve().parent.parent / "docs" / "stand-in-check" / "stand-in-check"
 CHROME = "/usr/bin/google-chrome"
 
 
 def pick_offline(page):
-    page.get_by_text("Model server and budgets").click()
+    page.get_by_text("Settings for every run").click()
     page.get_by_label("Offline corpus (no network)").check()
 
 
@@ -40,7 +40,7 @@ def main(url: str) -> int:
             page.goto(url)
             page.wait_for_selector("text=SCRIPTED-FAKE-MODEL", timeout=30000)
             pick_offline(page)
-            page.get_by_role("button", name="Run").first.click()
+            page.get_by_role("button", name="Run", exact=True).first.click()
             page.wait_for_selector("text=Step 2", timeout=60000)
             if scheme == "light":
                 page.screenshot(path=str(OUT / "research-running.png"), full_page=True)
@@ -49,8 +49,8 @@ def main(url: str) -> int:
             if scheme == "light":
                 page.get_by_role("tab", name="Improvement lab").click()
                 page.locator("input[role='listbox'], input[aria-label='Mission']").nth(1).click()
-                page.get_by_role("option", name="Improvement lab: Fewest coins for an amount").click()
-                page.get_by_role("button", name="Run").last.click()
+                page.get_by_role("option", name="Fewest coins for an amount").click()
+                page.get_by_role("button", name="Run", exact=True).last.click()
                 page.wait_for_function("() => (document.body.innerText.match(/Round \\d/g) || []).length >= 3", timeout=240000)
                 finish(page, 240000, marker="Lab score")
                 page.screenshot(path=str(OUT / "lab-done-light.png"), full_page=True)
