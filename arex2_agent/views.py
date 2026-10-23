@@ -173,10 +173,11 @@ def evidence_html(sources: Iterable, claims: Iterable, cited: dict) -> str:
         counts = {k: sum(c.status == k for c in claims) for k in ("backed", "computed", "unbacked")}
         out.append(f'<div class="note"><b>Claims in the answer:</b> {counts["backed"]} backed, {counts["computed"]} computed, {counts["unbacked"]} not backed (of {len(claims)}).</div>')
         for c in claims:
+            names = esc(c.source_title or c.source_url) + "".join(f" and {esc(title or url)}" for url, title in getattr(c, "also_from", []))
             if c.status == "backed":
-                chip = f'<span class="chip backed">backed by {esc(c.source_title or c.source_url)}</span>'
+                chip = f'<span class="chip backed">backed by {names}</span>'
             elif c.status == "computed":
-                chip = f'<span class="chip computed">computed from {esc(c.source_title or "retrieved text")} and a calculation</span>'
+                chip = f'<span class="chip computed">computed from {names} and a calculation</span>'
             else:
                 miss = f" (no {esc(', '.join(c.missing_numbers))} in the retrieved text)" if c.missing_numbers else ""
                 chip = f'<span class="chip unbacked">not backed by anything retrieved{miss}</span>'

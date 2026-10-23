@@ -40,6 +40,7 @@ class Claim:
     evidence: str = ""
     missing_numbers: list = field(default_factory=list)
     coverage: float = 0.0
+    also_from: list = field(default_factory=list)      # (url, title) of a second source that supplies the words the first one lacks
 
 
 def _words(text: str) -> set:
@@ -99,6 +100,11 @@ def check_claims(answer: str, sources: Iterable, computed_texts: Iterable[str] =
                 key = (cov, -len(cn - nums))              # most shared words first, then fewest missing numbers
                 if best_key is None or key > best_key:
                     best_key, best_hit = key, (cov, st, chunk, nums)
+        also = []
+        if best_hit is not None and best_hit[0] < COVERAGE:
+            joined = _second_source(cw, best_hit, stretches)
+            if joined is not None:
+                best_hit, also = (joined[0], best_hit[1], best_hit[2], best_hit[3]), [(joined[1].source.url, joined[1].source.title)]
         if best_hit is None or best_hit[0] < COVERAGE:
             out.append(Claim(text, "unbacked", missing_numbers=sorted(cn), coverage=best_hit[0] if best_hit else 0.0))
             continue
@@ -113,8 +119,24 @@ def check_claims(answer: str, sources: Iterable, computed_texts: Iterable[str] =
                 missing.remove(n)
                 from_computation = True
         status = "unbacked" if missing else ("computed" if from_computation else "backed")
-        out.append(Claim(text, status, st.source.url, st.source.title, st.source.kind, chunk[:300], missing, cov))
+        out.append(Claim(text, status, st.source.url, st.source.title, st.source.kind, chunk[:300], missing, cov, also))
     return out
+
+
+def _second_source(cw: set, best_hit, stretches):
+    """When no single stretch covers enough of the claim, look for a stretch of a different source that adds the missing words.
+    Returns (combined coverage, that source's stretches) or None."""
+    _, st1, _, _ = best_hit
+    have = _words(best_hit[2])
+    best = None
+    for st in stretches:
+        if st is st1:
+            continue
+        for _, words, _nums in st.items:
+            union = len(cw & (have | words)) / len(cw)
+            if (best is None or union > best[0]) and union > len(cw & have) / len(cw):
+                best = (union, st)
+    return best if best is not None and best[0] >= COVERAGE else None
 
 
 def summarize(claims) -> dict:

@@ -193,3 +193,45 @@ def test_the_evidence_quote_is_cut_to_a_readable_length():
     long = Source("https://x.example/", "X", "page", "The harbour bridge carried " + "very heavy traffic " * 60 + "daily.")
     (c,) = evidence.check_claims("The harbour bridge carried very heavy traffic daily.", [long], [])
     assert c.status == "backed" and len(c.evidence) <= 300
+
+
+# ---- a claim whose words are split over two sources -------------------------------------------------------------------------------------
+
+ONLY_OPERA = Source("https://en.wikipedia.org/wiki/Sydney_Opera_House", "Sydney Opera House", "page",
+                    "The Sydney Opera House is a performing arts centre. It was formally opened by Queen Elizabeth II on 20 October 1973.")
+ONLY_UTZON = Source("https://en.wikipedia.org/wiki/J%C3%B8rn_Utzon", "Jørn Utzon", "page", "Jørn Utzon was a Danish architect, born on 9 April 1918 in Copenhagen.")
+
+
+def test_a_claim_whose_words_are_split_over_two_sources_is_backed_by_both_and_names_both():
+    (c,) = evidence.check_claims("Jørn Utzon was born in 1918, 55 years before the Sydney Opera House was formally opened in 1973.", [ONLY_OPERA, ONLY_UTZON], ["1973 - 1918 = 55"])
+    assert c.status == "computed" and c.source_url and len(c.also_from) == 1
+    assert {c.source_title, c.also_from[0][1]} == {"Sydney Opera House", "Jørn Utzon"}
+
+
+def test_two_sources_that_together_still_cover_too_little_are_not_enough():
+    (c,) = evidence.check_claims("Jørn Utzon was born in 1918 and later painted every ship in Copenhagen harbour for the Danish royal navy.", [ONLY_OPERA, ONLY_UTZON], [])
+    assert c.status == "unbacked" and c.also_from == []
+
+
+def test_a_claim_one_source_covers_alone_names_only_that_source():
+    (c,) = evidence.check_claims("The Sydney Opera House was formally opened by Queen Elizabeth II on 20 October 1973.", [ONLY_OPERA, ONLY_UTZON], [])
+    assert c.status == "backed" and c.also_from == []
+
+
+def test_the_second_source_must_add_words_to_count():
+    twin = Source("https://other.example/opera", "Opera copy", "page", ONLY_OPERA.text)
+    (c,) = evidence.check_claims("The Sydney Opera House was formally opened by Queen Elizabeth II and later repainted completely in bright orange stripes.", [ONLY_OPERA, twin], [])
+    assert c.status == "unbacked" and c.also_from == []
+
+
+def test_words_scattered_over_one_source_far_apart_do_not_count_as_covered():
+    src = Source("https://x.example/", "X", "page", "The bridge opened to traffic. " + "Filler sentence about the weather. " * 20 + "The engineers celebrated with a large parade.")
+    (c,) = evidence.check_claims("The bridge opened to traffic and the engineers celebrated with a large parade.", [src], [])
+    assert c.status == "unbacked" and c.also_from == []
+
+
+def test_two_sources_that_add_only_a_little_together_stay_below_the_bar():
+    a = Source("https://a.example/", "A", "page", "Copenhagen harbour has many ships.")
+    b = Source("https://b.example/", "B", "page", "The navy owns a royal yacht.")
+    (c,) = evidence.check_claims("Copenhagen harbour hosts every painted ship owned by the navy under royal protection through winter.", [a, b], [])
+    assert c.status == "unbacked" and c.also_from == []

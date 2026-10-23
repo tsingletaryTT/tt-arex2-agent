@@ -349,3 +349,15 @@ def test_a_finished_run_gets_the_good_notice_and_a_failed_one_the_error_notice()
     assert 'class="notice good"' in views.final_notice_html({"stop_reason": "answered"})
     assert 'class="notice error"' in views.final_notice_html({"stop_reason": "server_down", "detail": "x"})
     assert 'class="notice warn"' in views.final_notice_html({"stop_reason": "length"})
+
+
+def test_a_claim_backed_by_two_sources_names_both():
+    c = evidence.Claim("Utzon was born in 1918, 55 years before the opening in 1973.", "computed", "https://a/", "Sydney Opera House", "page", "x",
+                       also_from=[("https://b/", "Jørn Utzon")])
+    out = views.evidence_html([], [c], {"opened": 0, "never_opened": []})
+    assert "Sydney Opera House and Jørn Utzon" in out
+
+
+def test_the_second_source_name_is_escaped():
+    c = evidence.Claim("A claim that has enough words in it to count.", "backed", "https://a/", "A", "page", "x", also_from=[("https://b/", BAD)])
+    assert "<script" not in views.evidence_html([], [c], {"opened": 0, "never_opened": []})

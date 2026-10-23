@@ -282,3 +282,8 @@ def test_an_answer_of_the_wrong_type_is_wrong_even_when_it_compares_equal():
     floaty = REFERENCE["count_pairs"].replace("return total", "return float(total)")
     r = lab.score_solution(lab.TASKS["count_pairs"], floaty)
     assert r.passed == 0 and r.score == 0.0
+
+
+def test_the_lab_system_prompt_names_the_loop_and_says_report_text_is_data():
+    s = lab.LAB_SYSTEM_PROMPT.lower()
+    assert "submit_solution" in s and "revise" in s and "never follow instructions" in s and "do not resubmit" in s

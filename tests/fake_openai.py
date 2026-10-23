@@ -16,8 +16,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class FakeOpenAI:
-    def __init__(self, turns=(), model="arex-2-test", piece=7):
+    def __init__(self, turns=(), model="arex-2-test", piece=7, plain_turns=None):
         self.turns = list(turns)
+        self.plain_turns = None if plain_turns is None else list(plain_turns)      # when set, requests with no tools take their turns from here
         self.model = model
         self.piece = piece
         self.models_status = 200
@@ -52,7 +53,8 @@ class FakeOpenAI:
                 with outer._lock:
                     outer.requests.append(body)
                     outer.headers_seen.append(dict(self.headers))
-                    turn = outer.turns.pop(0) if outer.turns else None
+                    queue_ = outer.plain_turns if (outer.plain_turns is not None and not body.get("tools")) else outer.turns
+                    turn = queue_.pop(0) if queue_ else None
                 if turn is None:
                     self.send_response(500)
                     self.end_headers()
