@@ -405,3 +405,13 @@ def test_an_earlier_snapshot_does_not_change_when_the_run_goes_on():
         snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}), throttle_s=0))
     first_with_step = next(s for s in snaps if s["steps"])
     assert first_with_step["steps"][0]["tools"] == []
+
+
+def test_while_a_resumed_run_is_going_the_old_final_and_stats_are_not_in_the_snapshots():
+    turns = [{"reasoning": "long", "finish_reason": "length"}, {"content": "now answered"}]
+    with FakeOpenAI(turns) as f:
+        sess = session.Session(research(), settings(f, step_tokens=500), toolbox=tools.Toolbox(env={}))
+        run(sess)
+        snaps = list(sess.resume(step_tokens=2000))
+    assert snaps[0]["final"] is None and snaps[0]["agent"] is None and snaps[0]["running"]
+    assert snaps[-1]["final"]["stop_reason"] == "answered" and snaps[-1]["agent"]["stop_reason"] == "answered"

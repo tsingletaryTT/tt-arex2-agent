@@ -171,7 +171,7 @@ def main(argv=None) -> int:
             if a.ui:
                 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
                 from demo import app as page
-                page.build_app(default_url=launcher.url).queue().launch(server_name=a.host, server_port=a.ui_port, show_error=True)
+                page.launch(a.host, a.ui_port, url=launcher.url)
             else:
                 while launcher.proc is None or launcher.proc.poll() is None:
                     time.sleep(2)

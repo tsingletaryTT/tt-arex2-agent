@@ -146,7 +146,7 @@ class Session:
         if self.run is None or not self.run.can_resume:
             yield self.snapshot()
             return
-        self.running, self._seg_start, self.final = True, self._clock(), None
+        self.running, self._seg_start, self.final, self.agent_stats = True, self._clock(), None, None
         self.cancel.clear()
         if step_tokens:
             self.settings.step_tokens = step_tokens
