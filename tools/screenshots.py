@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 Tenstorrent AI ULC
-"""Take the README screenshots of the page, running against tools/demo_stack.py. They show the page with a SCRIPTED stand-in model. It is not AREX-2.
+"""Take screenshots of the page running against tools/demo_stack.py, which serves a SCRIPTED stand-in model. It is not AREX-2.
+
+The images are written to docs/stand-in-check/, which git ignores, so a stand-in screenshot cannot end up in the README by accident. The README's
+screenshots come from the real model (see "What ran on the real model").
 
     python tools/demo_stack.py &                       # in the project's venv
     python tools/screenshots.py http://127.0.0.1:7899/  # in any Python that has the `playwright` package; uses /usr/bin/google-chrome
@@ -13,7 +16,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-OUT = Path(__file__).resolve().parent.parent / "docs"
+OUT = Path(__file__).resolve().parent.parent / "docs" / "stand-in-check"
 CHROME = "/usr/bin/google-chrome"
 
 
@@ -28,7 +31,7 @@ def finish(page, timeout_ms=180000, marker="Sources read"):
 
 
 def main(url: str) -> int:
-    OUT.mkdir(exist_ok=True)
+    OUT.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch(executable_path=CHROME, headless=True, args=["--no-sandbox"])
         for scheme in ("light", "dark"):

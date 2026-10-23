@@ -5,3 +5,5 @@ __pycache__/
 .env.local
 runs/
 tools/.cache/
+generated/
+docs/stand-in-check/
