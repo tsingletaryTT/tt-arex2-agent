@@ -57,7 +57,8 @@ class Settings:
 
 class Session:
     def __init__(self, mission: dict, settings: Settings, cancel: Optional[threading.Event] = None, toolbox=None,
-                 client_factory: Callable = chat.ChatClient, clock: Callable = time.monotonic):
+                 client_factory: Callable = chat.ChatClient, clock: Callable = time.monotonic, throttle_s: float = THROTTLE_S):
+        self.throttle_s = throttle_s
         self.mission, self.settings = mission, settings.clean()
         self.cancel = cancel or threading.Event()
         self._toolbox, self._factory, self._clock = toolbox, client_factory, clock
@@ -115,7 +116,7 @@ class Session:
         run = self.run
         budget = self._budget().__dict__.copy()
         tb = self._toolbox if isinstance(self._toolbox, lab.LabToolbox) else getattr(self, "_lab_toolbox", None)
-        return {"mission": self.mission, "settings": self.settings, "steps": [dict(s) for s in self.steps],
+        return {"mission": self.mission, "settings": self.settings, "steps": [{**s, "tools": list(s["tools"])} for s in self.steps],
                 "meters": {"budget": budget, "steps": run.step_count if run else 0, "tokens": run.completion_tokens if run else 0, "seconds": self._elapsed()},
                 "sources": self._sources(), "claims": list(self.claims), "cited": dict(self.cited), "final": self.final, "answer": (self.final or {}).get("answer", ""),
                 "agent": self.agent_stats, "plain": self.plain, "plain_live": dict(self.plain_live), "rounds": list(tb.rounds) if tb else [],
@@ -199,7 +200,7 @@ class Session:
             elif kind == "plain_done":
                 self.plain, plain_running = payload, False
             now = self._clock()
-            if structural or now - last_yield >= THROTTLE_S or (agent_done and not plain_running):
+            if structural or now - last_yield >= self.throttle_s or (agent_done and not plain_running):
                 if agent_done and not plain_running:
                     self.running = False
                     self._used = self._elapsed() if self.running else self._used

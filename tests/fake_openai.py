@@ -16,7 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
 class FakeOpenAI:
-    def __init__(self, turns=(), model="arex-2-test", piece=7, plain_turns=None):
+    def __init__(self, turns=(), model="arex-2-test", piece=7, plain_turns=None, chunk_delay_s=0.0):
+        self.chunk_delay_s = chunk_delay_s
         self.turns = list(turns)
         self.plain_turns = None if plain_turns is None else list(plain_turns)      # when set, requests with no tools take their turns from here
         self.model = model
@@ -87,6 +88,8 @@ class FakeOpenAI:
             chunk["usage"] = usage
         wfile.write(b"data: " + json.dumps(chunk).encode() + b"\n\n")
         wfile.flush()
+        if self.chunk_delay_s:
+            time.sleep(self.chunk_delay_s)
 
     def _pieces(self, text):
         return [text[i:i + self.piece] for i in range(0, len(text), self.piece)] if text else []

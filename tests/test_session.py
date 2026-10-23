@@ -64,7 +64,7 @@ def test_a_research_run_yields_snapshots_and_ends_with_a_final_answer_stats_and_
 
 def test_the_first_snapshot_has_no_steps_and_a_middle_one_shows_a_live_step_with_its_reasoning_so_far():
     with FakeOpenAI([{"reasoning": "thinking hard about this", "content": "done"}], piece=3) as f:
-        snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={})))
+        snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}), throttle_s=0))
     assert snaps[0]["steps"] == [] and snaps[0]["running"]
     live = [s for s in snaps if s["steps"] and s["steps"][-1].get("live")]
     assert live and any("thinking" in s["steps"][-1]["reasoning"] for s in live)
@@ -102,7 +102,7 @@ def test_the_stats_count_only_tool_calls_that_ran():
 
 def test_snapshots_are_throttled_so_a_long_stream_does_not_flood_the_page():
     with FakeOpenAI([{"reasoning": "r" * 4000, "content": "c" * 4000}], piece=2) as f:
-        snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={})))
+        snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}), throttle_s=0.3))
     assert len(snaps) < 60
 
 
@@ -140,9 +140,13 @@ def test_compare_off_leaves_plain_empty():
 # ---- offline mode, a dead server, stop and resume -------------------------------------------------------------------------------------
 
 def test_offline_mode_serves_the_bundled_corpus_and_never_calls_the_network(monkeypatch):
-    def boom(*a, **k):
-        raise AssertionError("network used")
-    monkeypatch.setattr(tools, "default_http", boom)
+    real = socket.getaddrinfo
+
+    def only_loopback(host, *a, **k):
+        if host not in ("127.0.0.1", "localhost"):
+            raise AssertionError(f"network used: {host}")
+        return real(host, *a, **k)
+    monkeypatch.setattr(socket, "getaddrinfo", only_loopback)
     turns = [{"tool_calls": [call("wikipedia_page", title="Jørn Utzon")]}, {"content": "Born in 1918."}]
     with FakeOpenAI(turns) as f:
         last = run(session.Session(research(), session.Settings(base_url=f.url, model="m", mode="offline")))[-1]
@@ -166,8 +170,8 @@ def test_an_empty_model_name_is_looked_up_from_the_server():
 def test_the_stop_button_ends_both_runs():
     stop = threading.Event()
     long = {"reasoning": "x" * 6000, "content": "y" * 100}
-    with FakeOpenAI([long], plain_turns=[long], piece=2) as f:
-        sess = session.Session(research(), settings(f, compare=True), cancel=stop, toolbox=tools.Toolbox(env={}))
+    with FakeOpenAI([long], plain_turns=[long], piece=40, chunk_delay_s=0.01) as f:
+        sess = session.Session(research(), settings(f, compare=True), cancel=stop, toolbox=tools.Toolbox(env={}), throttle_s=0)
         out = []
         for snap in sess.events():
             out.append(snap)
@@ -229,6 +233,7 @@ def test_a_lab_run_records_each_submission_as_a_round_and_ends_with_the_best_sco
     assert last["rounds"][0].report.score < 0.7 and last["rounds"][1].report.score >= 0.99
     assert last["agent"]["lab_score"] >= 0.99 and last["final"]["stop_reason"] == "answered"
     assert any(len(s["rounds"]) == 1 for s in snaps)           # the page sees round 1 before round 2
+    assert last["claims"] == [] and last["cited"] == {"opened": 0, "never_opened": []}      # the lab scores code, it does not check prose
 
 
 def test_the_lab_uses_the_lab_system_prompt_and_no_web_tools():
@@ -246,3 +251,157 @@ def test_in_the_lab_the_plain_chat_one_shot_code_is_scored_by_the_same_harness()
     with FakeOpenAI([{"content": "agent final"}], plain_turns=[{"content": "```python\n" + WRONG + "```"}]) as f:
         last = run(session.Session(mission, settings(f, compare=True)))[-1]
     assert last["plain"]["lab_score"] is not None and last["plain"]["lab_score"] < 0.7
+
+
+def test_the_output_of_a_failed_program_does_not_make_a_number_count_as_computed():
+    from arex2_agent.code_sandbox import Outcome
+    page = {"query": {"pages": {"1": {"pageid": 1, "title": "Ledger", "extract": "The sum of the numbers recorded in the ledger was very large."}}}}
+    tb = tools.Toolbox(env={}, http=lambda url, params=None, headers=None, data=None: json.dumps(page), sandbox=lambda p, **k: Outcome("failed", "boom", "999\n"))
+    turns = [{"tool_calls": [call("wikipedia_page", title="Ledger")]}, {"tool_calls": [call("run_python", code="print(999)")]},
+             {"content": "The sum of the numbers recorded in the ledger was very large at 999."}]
+    with FakeOpenAI(turns) as f:
+        last = run(session.Session(research(), settings(f), toolbox=tb))[-1]
+    assert [c.status for c in last["claims"]] == ["unbacked"] and "999" in last["claims"][0].missing_numbers
+
+
+def test_the_output_of_a_successful_program_makes_a_number_count_as_computed():
+    from arex2_agent.code_sandbox import Outcome
+    page = {"query": {"pages": {"1": {"pageid": 1, "title": "Ledger", "extract": "The sum of the numbers recorded in the ledger was very large."}}}}
+    tb = tools.Toolbox(env={}, http=lambda url, params=None, headers=None, data=None: json.dumps(page), sandbox=lambda p, **k: Outcome("passed", "", "999\n"))
+    turns = [{"tool_calls": [call("wikipedia_page", title="Ledger")]}, {"tool_calls": [call("run_python", code="print(999)")]},
+             {"content": "The sum of the numbers recorded in the ledger was very large at 999."}]
+    with FakeOpenAI(turns) as f:
+        last = run(session.Session(research(), settings(f), toolbox=tb))[-1]
+    assert [c.status for c in last["claims"]] == ["computed"]
+
+
+# ---- guards found by mutation ------------------------------------------------------------------------------------------------------
+
+def test_every_step_keeps_its_own_reasoning_content_and_tool_calls_and_none_is_left_live():
+    turns = [{"reasoning": "first thought", "content": "Checking.", "tool_calls": [call("calculator", expression="2+2")]},
+             {"reasoning": "second thought", "content": "The answer is 4."}]
+    with FakeOpenAI(turns, piece=5) as f:
+        last = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}), throttle_s=0))[-1]
+    s1, s2 = last["steps"]
+    assert [s["n"] for s in last["steps"]] == [1, 2]
+    assert s1["reasoning"] == "first thought" and s1["content"] == "Checking." and [t["name"] for t in s1["tools"]] == ["calculator"]
+    assert s2["reasoning"] == "second thought" and s2["content"] == "The answer is 4." and s2["tools"] == []
+    assert not any(s["live"] for s in last["steps"]) and all(s["completion_tokens"] is not None or s["seconds"] >= 0 for s in last["steps"])
+
+
+def test_a_cut_off_step_is_flagged_then_replaced_by_the_resumed_one_and_the_budget_shows_the_new_limit():
+    turns = [{"reasoning": "long thought", "finish_reason": "length"}, {"reasoning": "short", "content": "now answered"}]
+    with FakeOpenAI(turns) as f:
+        sess = session.Session(research(), settings(f, step_tokens=500), toolbox=tools.Toolbox(env={}))
+        first = run(sess)[-1]
+        assert first["steps"][-1]["cut_off"] is True and first["steps"][-1]["live"] is False
+        last = list(sess.resume(step_tokens=3000))[-1]
+    assert [s["n"] for s in last["steps"]] == [1] and last["steps"][0]["content"] == "now answered" and "cut_off" not in last["steps"][0]
+    assert last["meters"]["budget"]["step_tokens"] == 3000
+
+
+def test_resume_on_a_run_that_is_not_resumable_does_nothing():
+    with FakeOpenAI([{"content": "answered"}]) as f:
+        sess = session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}))
+        run(sess)
+        snaps = list(sess.resume(extra_steps=5))
+        assert len(f.requests) == 1
+    assert len(snaps) == 1 and snaps[0]["final"]["stop_reason"] == "answered"
+
+
+def test_a_stop_pressed_after_a_cut_off_does_not_cancel_the_resumed_run():
+    turns = [{"reasoning": "long", "finish_reason": "length"}, {"content": "answered after all"}]
+    stop = threading.Event()
+    with FakeOpenAI(turns) as f:
+        sess = session.Session(research(), settings(f, step_tokens=500), cancel=stop, toolbox=tools.Toolbox(env={}))
+        run(sess)
+        stop.set()
+        last = list(sess.resume(step_tokens=2000))[-1]
+    assert last["final"]["stop_reason"] == "answered"
+
+
+def test_resuming_does_not_ask_the_plain_chat_again():
+    turns = [{"reasoning": "long", "finish_reason": "length"}, {"content": "agent done"}]
+    with FakeOpenAI(turns, plain_turns=[{"content": "plain once"}, {"content": "plain twice"}]) as f:
+        sess = session.Session(research(), settings(f, step_tokens=500, compare=True), toolbox=tools.Toolbox(env={}))
+        run(sess)
+        last = list(sess.resume(step_tokens=2000))[-1]
+        plain_requests = [r for r in f.requests if not r.get("tools")]
+    assert len(plain_requests) == 1 and last["plain"]["answer"] == "plain once"
+
+
+def test_an_unexpected_error_in_the_plain_chat_is_reported_there_and_the_agent_carries_on():
+    calls = []
+    def factory(url, model=None):
+        calls.append(1)
+        if len(calls) == 2:
+            raise RuntimeError("factory exploded")
+        return chat_client(url, model)
+    from arex2_agent import chat as chat_mod
+    chat_client = chat_mod.ChatClient
+    with FakeOpenAI([{"content": "agent answer"}]) as f:
+        last = run(session.Session(research(), settings(f, compare=True), toolbox=tools.Toolbox(env={}), client_factory=factory))[-1]
+    assert last["agent"]["stop_reason"] == "answered" and last["plain"]["stop_reason"] == "server_down" and "factory exploded" in last["plain"]["detail"]
+
+
+def test_an_unexpected_error_in_the_agent_thread_ends_the_run_with_a_plain_message(monkeypatch):
+    from arex2_agent import agent as agent_mod
+
+    class Boom(agent_mod.AgentRun):
+        def events(self, step_tokens=None):
+            yield {"type": "start", "mission": "x", "budget": {}}
+            raise RuntimeError("agent exploded")
+    monkeypatch.setattr(session.agent, "AgentRun", Boom)
+    with FakeOpenAI([{"content": "never asked"}]) as f:
+        last = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={})))[-1]
+    assert last["final"]["stop_reason"] == "server_down" and "agent exploded" in last["final"]["detail"] and not last["running"]
+
+
+def test_while_the_model_is_silent_a_heartbeat_snapshot_keeps_the_clock_moving(monkeypatch):
+    monkeypatch.setattr(session, "HEARTBEAT_S", 0.05)
+    with FakeOpenAI([{"content": "late answer", "delay_s": 0.5}]) as f:
+        snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}), throttle_s=10))
+    waiting = [s["meters"]["seconds"] for s in snaps if s["running"] and s["steps"]]
+    assert len(waiting) >= 4 and waiting[-1] > waiting[0]
+
+
+def test_the_elapsed_time_in_the_final_snapshot_is_the_time_the_run_took():
+    with FakeOpenAI([{"content": "x", "delay_s": 0.2}]) as f:
+        last = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={})))[-1]
+    assert 0.15 < last["meters"]["seconds"] < 5 and 0.15 < last["agent"]["seconds"] < 5
+
+
+def test_both_streams_are_throttled_when_the_comparison_runs_beside_the_agent():
+    with FakeOpenAI([{"reasoning": "r" * 3000, "content": "c" * 2000}], plain_turns=[{"reasoning": "p" * 3000, "content": "q" * 2000}], piece=2, chunk_delay_s=0.0005) as f:
+        snaps = run(session.Session(research(), settings(f, compare=True), toolbox=tools.Toolbox(env={}), throttle_s=0.3))
+    assert len(snaps) < 60 and snaps[-1]["plain"]["answer"]
+
+
+def test_tool_results_land_on_the_step_that_asked_for_them():
+    turns = [{"tool_calls": [call("calculator", expression="1+1")]}, {"tool_calls": [call("calculator", expression="2+3")]}, {"content": "done"}]
+    with FakeOpenAI(turns) as f:
+        last = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={})))[-1]
+    assert [[t["text"] for t in s["tools"]] for s in last["steps"]] == [["1+1 = 2"], ["2+3 = 5"], []]
+
+
+def test_a_step_is_no_longer_live_once_its_reply_is_complete_even_before_the_next_step_starts():
+    turns = [{"tool_calls": [call("calculator", expression="1+1")]}, {"content": "done"}]
+    with FakeOpenAI(turns) as f:
+        snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}), throttle_s=0))
+    with_tool = [s for s in snaps if s["steps"] and s["steps"][0]["tools"] and len(s["steps"]) == 1]
+    assert with_tool and all(s["steps"][0]["live"] is False for s in with_tool)
+
+
+def test_a_step_that_was_still_streaming_when_the_server_failed_is_not_left_marked_live():
+    turns = [{"tool_calls": [call("calculator", expression="1+1")]}, {"status": 503, "error": "engine restarting"}]
+    with FakeOpenAI(turns) as f:
+        last = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={})))[-1]
+    assert last["final"]["stop_reason"] == "server_down" and not any(s["live"] for s in last["steps"])
+
+
+def test_an_earlier_snapshot_does_not_change_when_the_run_goes_on():
+    turns = [{"tool_calls": [call("calculator", expression="1+1")]}, {"content": "done"}]
+    with FakeOpenAI(turns) as f:
+        snaps = run(session.Session(research(), settings(f), toolbox=tools.Toolbox(env={}), throttle_s=0))
+    first_with_step = next(s for s in snaps if s["steps"])
+    assert first_with_step["steps"][0]["tools"] == []

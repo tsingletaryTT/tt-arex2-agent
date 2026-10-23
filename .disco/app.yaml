@@ -1,0 +1,5 @@
+name: arex2-research-lab
+description: AREX-2 (BAAI, 27B) as a research agent on a Blackhole board. Runs missions with tools and sources, and improves code over measured rounds (Gradio, boots the model on 2 leased chips)
+port: 7872
+chips: 2
+launch: .venv/bin/python serve/serve_arex2.py --ui --port 8000 --ui-port 7872
