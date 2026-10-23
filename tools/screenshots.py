@@ -8,6 +8,8 @@ screenshots come from the real model (see "What ran on the real model").
 
     python tools/demo_stack.py &                       # in the project's venv
     python tools/screenshots.py http://127.0.0.1:7899/  # in any Python that has the `playwright` package; uses /usr/bin/google-chrome
+
+Buttons are found by their exact names. A name match on "Run" alone also finds the "Settings for every run" header and "Download this run".
 """
 from __future__ import annotations
 
@@ -16,7 +18,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-OUT = Path(__file__).resolve().parent.parent / "docs" / "stand-in-check" / "stand-in-check"
+OUT = Path(__file__).resolve().parent.parent / "docs" / "stand-in-check"
 CHROME = "/usr/bin/google-chrome"
 
 
