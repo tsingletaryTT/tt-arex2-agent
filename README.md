@@ -26,17 +26,19 @@ Model: [`episod/arex-2-p300`](https://huggingface.co/episod/arex-2-p300) on 2 Bl
 
 On 2026-10-23 the page ran against the published package `episod/arex-2-p300` (2 chips, speculative drafter on, sampling on the device). The model's tool calls parsed correctly through vLLM's `qwen3_coder` parser, and its reasoning came back in `reasoning_content`. These are one run of each kind. They show what the page does with the real model and are not a benchmark.
 
-**Research mission with the offline corpus: the Sydney Opera House architect.** The agent ran 4 steps (`wikipedia_search`, two `wikipedia_page` reads, `calculator`) in 14 to 29 seconds over three runs. It answered that Jørn Utzon was born in 1918 and the building opened in 1973, 55 years later, and listed its sources. Plain chat gave the same years. It gave its own birth and opening dates, which differ from the dates in the sources the page shows.
+**Research mission with the offline corpus: the Sydney Opera House architect.** The agent ran 4 steps (`wikipedia_search`, two `wikipedia_page` reads, `calculator`) in 14 to 29 seconds across the runs behind these screenshots. It answered that Jørn Utzon was born in 1918 and the building opened in 1973, 55 years later, and listed its sources. Plain chat gave the same years. It gave its own birth and opening dates, which differ from the dates in the sources the page shows.
 
 ![The research mission, light theme](docs/research-done-light.png)
 
 ![The research mission, dark theme](docs/research-done-dark.png)
 
-These two images were taken before the header badge was fixed: the offline corpus is selected, and the badge still says "live web tools". The runs themselves used the offline corpus.
+The header badge in these two shows the offline corpus, as selected.
 
 **Research mission with live tools: the Transformer paper.** The agent called `arxiv_search`, then `fetch_url` on the arXiv abstract page, in 3 steps and 15 seconds. It answered that the paper lists 8 authors, that the last author is Illia Polosukhin, and that version 1 was posted on 12 June 2017. The page's claim check marked that answer "not backed". It matches words and numbers literally and listed 1, 12, 2017 and 8 as not found in the retrieved text. Counting names is outside what it does, and the authors and the submission date are in the text the agent retrieved. This is a limit of the check.
 
-**Improvement lab: edit distance.** The model ran its own tests three times with `run_python`, found and fixed a bug in its recurrence, then submitted once. The lab scored the submission 1.00 (10 of 10 tests, 0.11 seconds on the large input) after 5 steps and 116 seconds. The model's final text says "In Round 1 I had a bug", which describes its tests before submitting. The lab recorded a single submitted round, so the score chart has one point. Plain chat on the same task ran out of the page's 4,096-token reply limit while thinking and produced no code. That limit is a page setting and says nothing about the model.
+**Improvement lab: edit distance.** The model ran its own tests four times with `run_python`, then submitted once. The lab scored the submission 1.00 (10 of 10 tests, 0.10 seconds on the large input) after 7 steps and 122 seconds. It refused a second, identical submission as a repeated call, and the page shows that step in yellow. The model's final text says its first draft had the delete and substitute transitions swapped and that a brute-force cross-check on small random strings caught it before it submitted. The lab recorded a single submitted round, so the score chart has one point. Plain chat on the same task ran out of the page's 4,096-token reply limit while thinking and produced no code. That limit is a page setting and says nothing about the model.
+
+![The improvement lab: edit distance](docs/lab-edit-distance-light.png)
 
 Two problems found on that first run are fixed in this repository: the header badge did not follow the tools setting, and a failed server start showed only the end of the server log. The launcher now quotes the first real error with its line number.
 
