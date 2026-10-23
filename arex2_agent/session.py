@@ -270,4 +270,5 @@ class Session:
         best = tb.best if tb else None
         return {"steps": f.get("steps", 0), "completion_tokens": f.get("completion_tokens", 0), "seconds": f.get("seconds", 0.0), "sources": f.get("sources", 0),
                 "tool_calls": self.tool_calls, "answer": f.get("answer", ""), "claims": evidence.summarize(self.claims) if self.claims else None,
-                "stop_reason": f.get("stop_reason", ""), "detail": f.get("detail", ""), "lab_score": best.report.score if best else None}
+                "stop_reason": f.get("stop_reason", ""), "detail": f.get("detail", ""), "lab_score": best.report.score if best else None,
+                "rounds": len(tb.rounds) if tb else 0}

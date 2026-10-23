@@ -217,17 +217,23 @@ def scorecard_html(agent: Optional[dict], plain: Optional[dict], expected_facts:
         row("Mentions the expected facts", [f"{_found(d.get('answer', ''), expected_facts)} of {n}" for _, d in cols])
     if any(d.get("lab_score") is not None for _, d in cols):
         row("Lab score", [(f"{d['lab_score']:.2f}" if d.get("lab_score") is not None else "no code to score") for _, d in cols])
-    row("Sources read", [f"{d.get('sources', 0)}" if name == "Agent" else "no sources (no tools)" for name, d in cols])
-    row("Claims backed by retrieved text", [
-        (f"{d['claims']['backed'] + d['claims']['computed']} of {d['claims']['total']}" if d.get("claims") and d["claims"]["total"] else "none to check") if name == "Agent"
-        else "no sources to check against" for name, d in cols])
+    is_lab = any(d.get("lab_score") is not None for _, d in cols)
+    if not is_lab:
+        row("Sources read", [f"{d.get('sources', 0)}" if name == "Agent" else "no sources (no tools)" for name, d in cols])
+        row("Claims backed by retrieved text", [
+            (f"{d['claims']['backed'] + d['claims']['computed']} of {d['claims']['total']}" if d.get("claims") and d["claims"]["total"] else "none to check") if name == "Agent"
+            else "no sources to check against" for name, d in cols])
     row("Steps", [f"{d.get('steps', 0)}" for _, d in cols])
     row("Tokens generated", [f"{int(d.get('completion_tokens') or 0):,}" for _, d in cols])
     row("Time", [_fmt_s(d.get("seconds")) for _, d in cols])
     row("How it ended", [esc(STOP_TEXT.get(d.get("stop_reason"), d.get("stop_reason", ""))) for _, d in cols])
     head = "".join(f"<th>{esc(name)}</th>" for name, _ in cols)
     sentence = ""
-    if agent:
+    if agent and agent.get("lab_score") is not None:
+        n = int(agent.get("rounds") or 0)
+        sentence = (f"The agent submitted {n} solution{'s' if n != 1 else ''} and measured each one"
+                    + ("; plain chat wrote its code in one shot with no way to run it." if plain else "."))
+    elif agent:
         sentence = (f"The agent opened {int(agent.get('sources', 0))} sources and made {int(agent.get('tool_calls', 0))} tool calls"
                     + ("; plain chat answered in one shot with no way to look anything up." if plain else "."))
     foot = ""
@@ -238,6 +244,14 @@ def scorecard_html(agent: Optional[dict], plain: Optional[dict], expected_facts:
 
 
 # ---- the improvement lab ----------------------------------------------------------------------------------------------------------
+
+def _large(report) -> str:
+    if report.timed_out:
+        return "timed out"
+    if report.large_seconds is None:
+        return "-"
+    return f"{report.large_seconds:.2f} s" if report.large_seconds < 10 else f"{report.large_seconds:.1f} s"
+
 
 def rounds_html(rounds: Iterable) -> str:
     rounds = list(rounds)
@@ -255,7 +269,7 @@ def rounds_html(rounds: Iterable) -> str:
     svg = (f'<svg viewBox="0 0 {w} {h}" role="img" aria-label="Score by round" width="100%">{grid}'
            f'<polyline class="line" points="{pts}"/>{dots}<text x="{w - pad}" y="14" text-anchor="end">best: round {best.number}, {best.report.score:.2f}</text></svg>')
     rows = "".join(f"<tr><td>Round {r.number}</td><td>{r.report.score:.2f}</td><td>{r.report.passed} of {r.report.total}</td>"
-                   f"<td>{'timed out' if r.report.timed_out else (f'{r.report.large_seconds:.1f} s' if r.report.large_seconds is not None else '-')}</td></tr>" for r in rounds)
+                   f"<td>{_large(r.report)}</td></tr>" for r in rounds)
     return (f'<div class="arex">{svg}<table><tr><th>Round</th><th>Score</th><th>Tests passed</th><th>Large input</th></tr>{rows}</table>'
             f'<details><summary>Code of the best round (round {best.number}, score {best.report.score:.2f})</summary><pre>{esc(best.code)}</pre></details>'
             '<div class="note">Score = 0.7 x correctness + 0.3 x speed on a large input. The lab defines this score. It measures this task, not the model in general.</div></div>')

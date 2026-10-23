@@ -205,7 +205,7 @@ def make_round(n, score, large=1.2, passed=9, total=9):
 
 def test_the_rounds_table_lists_each_round_with_score_tests_and_large_runtime():
     out = views.rounds_html([make_round(1, 0.62, large=7.5, passed=8), make_round(2, 0.97, large=0.6)])
-    assert "Round 1" in out and "Round 2" in out and "0.62" in out and "0.97" in out and "8 of 9" in out and "7.5 s" in out
+    assert "Round 1" in out and "Round 2" in out and "0.62" in out and "0.97" in out and "8 of 9" in out and "7.50 s" in out
 
 
 def test_the_score_chart_is_an_svg_with_a_point_per_round_and_marks_the_best():
@@ -452,3 +452,21 @@ def test_a_claim_computed_from_a_calculation_alone_says_so_and_names_no_source()
     c = evidence.Claim("The difference between 1973 and 1918 is 55 years.", "computed", evidence="1973 - 1918 = 55")
     out = views.evidence_html([], [c], {"opened": 0, "never_opened": []})
     assert "numbers from a calculation" in out and "1973 - 1918 = 55" in out and "computed from  and" not in out and "computed from None" not in out
+
+
+def test_a_sub_second_large_input_time_keeps_two_decimals_and_a_long_one_keeps_one():
+    out = views.rounds_html([make_round(1, 0.9, large=0.04), make_round(2, 0.5, large=12.34)])
+    assert "0.04 s" in out and "12.3 s" in out
+
+
+def test_the_lab_scorecard_leaves_out_the_source_and_claim_rows_and_says_how_many_solutions_were_submitted():
+    agent = dict(AGENT, lab_score=0.97, rounds=3, sources=0, claims=None)
+    plain = dict(PLAIN, lab_score=0.38)
+    out = views.scorecard_html(agent, plain, None)
+    assert "Sources read" not in out and "Claims backed" not in out
+    assert "submitted 3 solutions" in out and "0.97" in out and "0.38" in out
+    assert "opened" not in out
+
+
+def test_one_submission_is_not_pluralised():
+    assert "submitted 1 solution" in views.scorecard_html(dict(AGENT, lab_score=0.5, rounds=1), None, None) and "1 solutions" not in views.scorecard_html(dict(AGENT, lab_score=0.5, rounds=1), None, None)

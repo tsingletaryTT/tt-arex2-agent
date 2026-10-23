@@ -231,7 +231,7 @@ def test_a_lab_run_records_each_submission_as_a_round_and_ends_with_the_best_sco
     last = snaps[-1]
     assert [r.number for r in last["rounds"]] == [1, 2]
     assert last["rounds"][0].report.score < 0.7 and last["rounds"][1].report.score >= 0.99
-    assert last["agent"]["lab_score"] >= 0.99 and last["final"]["stop_reason"] == "answered"
+    assert last["agent"]["lab_score"] >= 0.99 and last["agent"]["rounds"] == 2 and last["final"]["stop_reason"] == "answered"
     assert any(len(s["rounds"]) == 1 for s in snaps)           # the page sees round 1 before round 2
     assert last["claims"] == [] and last["cited"] == {"opened": 0, "never_opened": []}      # the lab scores code, it does not check prose
 
