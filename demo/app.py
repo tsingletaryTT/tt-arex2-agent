@@ -162,6 +162,7 @@ def build_app(default_url: Optional[str] = None) -> gr.Blocks:
         shared = [url, model, mode, max_steps, max_tokens, minutes, step_tokens, temperature, top_p]
         demo.load(check_server, [url, mode], badge)
         check.click(check_server, [url, mode], badge, queue=False)
+        mode.change(check_server, [url, mode], badge, queue=False)     # the badge says which tools the next run uses, so it follows the radio
 
         def make_tab(kinds, lab_page: bool, default_compare: bool):
             choices = preset_choices(kinds)

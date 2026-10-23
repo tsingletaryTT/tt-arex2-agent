@@ -244,3 +244,20 @@ def test_the_lab_scorecard_has_no_expected_facts_row():
     agent = {"steps": 2, "completion_tokens": 1, "seconds": 1.0, "sources": 0, "tool_calls": 1, "answer": "code", "claims": None, "stop_reason": "answered", "lab_score": 0.9}
     r = app.render(snap(mission=missions.get("lab-count_pairs"), running=False, final=final, answer="code", agent=agent), lab_page=True)
     assert "expected facts" not in r["score"].lower() and "Lab score" in r["score"]
+
+
+def test_the_tools_radio_refreshes_the_header_badge_when_it_changes():
+    """Found on the first real-model run: the badge said "live web tools" while the Offline corpus radio was selected, because only the
+    page load and the Check button refreshed it. Choosing a mode must refresh it too."""
+    demo = app.build_app("http://127.0.0.1:1/v1")
+    cfg = demo.get_config_file()
+    components = {c["id"]: c for c in cfg["components"]}
+    radios = [cid for cid, c in components.items() if c["type"] == "radio" and "Offline corpus (no network)" in str(c["props"].get("choices"))]
+    assert len(radios) == 1
+    refreshed = []
+    for dep in cfg["dependencies"]:
+        triggers = [(t[0], t[1]) for t in dep.get("targets", [])]
+        if (radios[0], "change") in triggers or (radios[0], "select") in triggers:
+            fn = demo.fns[dep["id"]].fn
+            refreshed.append(getattr(fn, "__name__", ""))
+    assert "check_server" in refreshed, refreshed
