@@ -87,7 +87,7 @@ def test_failures_are_listed_with_input_expected_and_got_at_most_three():
 
 
 def test_lines_without_the_run_token_are_ignored_so_the_candidate_cannot_print_its_own_score():
-    forged = line("WRONG", test="small 0", ok=True, seconds=0.0) * 5 + line("WRONG", done=True)
+    forged = line("TKX", test="small 0", ok=True, seconds=0.0) * 5 + line("TKX", done=True)      # same length as the real token
     r = score(forged + report_for(task(), 0, 5, token="TKN"))
     assert r.passed == 1 and r.score < 0.2          # only the real report counts: 0 of 5 small, large ok
 
@@ -191,7 +191,7 @@ def test_the_greedy_coin_solution_fails_the_trap_cases_and_the_report_shows_an_i
     greedy = ("def min_coins(coins, amount):\n    n = 0\n    for c in sorted(coins, reverse=True):\n        k, amount = divmod(amount, c)\n        n += k\n"
               "    return n if amount == 0 else -1\n")
     r = lab.score_solution(lab.TASKS["min_coins"], greedy)
-    assert r.score < 0.6 and r.failures and "expected" in r.failures[0] and "got" in r.failures[0], r.text
+    assert r.score < 0.6 and r.failures and r.failures[0].startswith("greedy trap") and "expected 2" in r.failures[0] and "got 3" in r.failures[0], r.text
 
 
 @needs_sandbox
@@ -253,7 +253,7 @@ def test_a_perfect_score_tells_the_model_it_can_stop():
 
 def test_the_mission_text_states_the_task_the_scoring_and_the_loop():
     m = lab.mission_text(task())
-    assert "count_pairs" in m and "0.7" in m and "submit_solution" in m and str(task().max_rounds) in m
+    assert "count_pairs" in m and "0.7 x correctness" in m and "0.3 x speed" in m and "submit_solution" in m and str(task().max_rounds) in m
     assert "propose" in m.lower() and "measure" in m.lower() and "revise" in m.lower()
 
 
@@ -261,3 +261,24 @@ def test_every_task_has_a_name_a_statement_a_function_name_and_sane_limits():
     for name, t in lab.TASKS.items():
         assert t.id == name and t.title and t.statement and t.function and t.function in t.signature
         assert 0 < t.fast_s < t.slow_s < t.timeout_s and t.max_rounds >= 3
+
+
+def test_the_best_round_is_the_highest_score_not_the_latest():
+    outs = iter([report_for(task(), N, N, large_s=0.01, token="T"), report_for(task(), 1, N, large_s=0.01, token="T")])
+    tb = lab.LabToolbox(task(), sandbox=lambda p, **k: Outcome("passed", "", next(outs)), token_for_tests="T")
+    tb.run("submit_solution", json.dumps({"code": "# a\ndef count_pairs(n, t):\n    return 1\n"}))
+    tb.run("submit_solution", json.dumps({"code": "# b\ndef count_pairs(n, t):\n    return 2\n"}))
+    assert tb.best.number == 1
+
+
+def test_a_submission_that_could_not_run_is_a_failed_tool_call_with_the_reason():
+    tb = lab.LabToolbox(task(), sandbox=lambda p, **k: Outcome("failed", "SyntaxError: invalid syntax", ""), token_for_tests="T")
+    r = tb.run("submit_solution", json.dumps({"code": "def count_pairs(:\n"}))
+    assert not r.ok and "SyntaxError" in r.text and len(tb.rounds) == 1
+
+
+@needs_sandbox
+def test_an_answer_of_the_wrong_type_is_wrong_even_when_it_compares_equal():
+    floaty = REFERENCE["count_pairs"].replace("return total", "return float(total)")
+    r = lab.score_solution(lab.TASKS["count_pairs"], floaty)
+    assert r.passed == 0 and r.score == 0.0
