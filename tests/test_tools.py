@@ -384,3 +384,70 @@ def test_offline_search_ranks_a_title_match_above_a_text_mention():
     tb = tools.Toolbox(mode="offline", corpus=tools.OfflineCorpus(docs), env={})
     r = call(tb, "wikipedia_search", query="ada")
     assert [s.title for s in r.sources] == ["Ada Lovelace", "Unrelated"]
+
+
+# ---- the default HTTP helper: rate limits ------------------------------------------------------------------------------------------
+
+import io
+import urllib.error
+
+
+class _Resp:
+    def __init__(self, body): self.body = body
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+    def read(self, n=-1): return self.body
+
+
+def _http_error(code, retry_after=None):
+    hdrs = {"Retry-After": str(retry_after)} if retry_after is not None else {}
+    import email.message
+    m = email.message.Message()
+    for k, v in hdrs.items():
+        m[k] = v
+    return urllib.error.HTTPError("https://x/", code, "err", m, io.BytesIO(b""))
+
+
+def test_a_rate_limited_answer_is_retried_after_the_wait_the_server_asks_for():
+    calls, sleeps = [], []
+    def opener(req, timeout=None):
+        calls.append(1)
+        if len(calls) < 3:
+            raise _http_error(429, retry_after=3)
+        return _Resp(b"ok")
+    assert tools.default_http("https://x/", _open=opener, _sleep=sleeps.append) == "ok"
+    assert len(calls) == 3 and sleeps == [3, 3]
+
+
+def test_the_wait_is_capped_and_the_retries_are_limited_then_the_error_is_raised():
+    sleeps = []
+    def opener(req, timeout=None):
+        raise _http_error(429, retry_after=500)
+    with pytest.raises(urllib.error.HTTPError):
+        tools.default_http("https://x/", _open=opener, _sleep=sleeps.append)
+    assert sleeps == [tools.MAX_RETRY_WAIT_S, tools.MAX_RETRY_WAIT_S] and len(sleeps) == tools.RETRIES
+
+
+def test_a_rate_limit_without_a_retry_after_header_waits_a_short_default():
+    sleeps = []
+    def opener(req, timeout=None):
+        if not sleeps:
+            raise _http_error(429)
+        return _Resp(b"fine")
+    assert tools.default_http("https://x/", _open=opener, _sleep=sleeps.append) == "fine" and sleeps == [tools.DEFAULT_RETRY_WAIT_S]
+
+
+def test_other_http_errors_are_not_retried():
+    calls = []
+    def opener(req, timeout=None):
+        calls.append(1); raise _http_error(404)
+    with pytest.raises(urllib.error.HTTPError):
+        tools.default_http("https://x/", _open=opener, _sleep=lambda s: None)
+    assert len(calls) == 1
+
+
+def test_a_rate_limit_that_survives_the_retries_reaches_the_model_as_a_plain_tool_error():
+    def http(url, params=None, headers=None, data=None):
+        raise _http_error(429)
+    r = call(box(http), "wikipedia_search", query="x")
+    assert not r.ok and "429" in r.text

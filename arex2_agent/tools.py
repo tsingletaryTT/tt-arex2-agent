@@ -17,6 +17,7 @@ import json
 import math
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,6 +34,9 @@ SERPER_URL = "https://google.serper.dev/search"
 JINA_URL = "https://s.jina.ai/"
 SOURCE_TEXT_KEEP = 60000          # characters of a retrieved page kept for the evidence check
 HTTP_TIMEOUT_S = 20
+RETRIES = 2                       # extra attempts after a rate-limit answer
+MAX_RETRY_WAIT_S = 8              # the longest wait honoured before one retry
+DEFAULT_RETRY_WAIT_S = 2
 USER_AGENT = "tt-arex2-agent/0.1 (research demo; read-only)"
 MAX_EXPRESSION = 500
 MAX_AST_DEPTH = 30
@@ -57,13 +61,22 @@ class ToolResult:
     summary: str = ""         # one line for the timeline
 
 
-def default_http(url, params=None, headers=None, data=None) -> str:
-    """GET (or POST when `data` is given) to one of the fixed API hosts. Returns the body text; raises OSError on failure."""
+def default_http(url, params=None, headers=None, data=None, _open=urllib.request.urlopen, _sleep=time.sleep) -> str:
+    """GET (or POST when `data` is given) to one of the fixed API hosts. Returns the body text; raises OSError on failure.
+    A 429 or 503 is retried up to RETRIES times, waiting what Retry-After asks for (at most MAX_RETRY_WAIT_S)."""
     if params:
         url = url + ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT, **(headers or {})})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT_S) as resp:
-        return resp.read(3_000_000).decode("utf-8", "replace")
+    for attempt in range(RETRIES + 1):
+        try:
+            with _open(req, timeout=HTTP_TIMEOUT_S) as resp:
+                return resp.read(3_000_000).decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            if e.code not in (429, 503) or attempt == RETRIES:
+                raise
+            ask = e.headers.get("Retry-After") if e.headers else None
+            wait = DEFAULT_RETRY_WAIT_S if not (ask and ask.strip().isdigit()) else min(int(ask), MAX_RETRY_WAIT_S)
+            _sleep(wait)
 
 
 # ---- the calculator ---------------------------------------------------------------------------------------------------------
